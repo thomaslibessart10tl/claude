@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Canal Libre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="hls.min.js"></script>
+<script>if(!window.Hls)document.write('<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"><\/script>')</script>
+<style>
+/* Layout : régie de diffusion — lecteur à gauche, grille des chaînes à droite ; empilés sur mobile */
+:root{
+  --bg:#0c0f14; --panel:#141922; --line:#232b38; --fg:#e8ecf2; --muted:#8792a3;
+  --accent:#ffb547; --live:#ff5a5a; --ok:#4fd1a5;
+  --display:"Archivo", system-ui, sans-serif;
+  --body:"Archivo", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;align-items:center;gap:14px;padding-block:14px;flex-wrap:wrap}
+.brand{font-family:var(--display);font-stretch:118%;font-weight:800;font-size:22px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
+.brand i{width:10px;height:10px;border-radius:50%;background:var(--live);box-shadow:0 0 0 4px #ff5a5a33;display:inline-block}
+.loader{display:flex;gap:8px;flex:1;min-width:260px}
+.loader input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+.btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 14px;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:700}
+
+main{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:18px;padding-bottom:18px;height:calc(100% - 70px)}
+@media (max-width:820px){main{grid-template-columns:1fr;height:auto}}
+
+.stage{display:flex;flex-direction:column;gap:12px;min-width:0}
+.screen{position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:16/9;max-width:100%;border:1px solid var(--line)}
+video{width:100%;height:100%;display:block;background:#000}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:24px;color:var(--muted);pointer-events:none}
+.overlay strong{color:var(--fg);font-family:var(--display);font-stretch:110%;font-size:18px}
+.now{display:flex;align-items:center;gap:12px;min-width:0}
+.now img,.logo{width:44px;height:44px;border-radius:8px;object-fit:contain;background:var(--panel);border:1px solid var(--line);flex:none}
+.now .t{min-width:0}
+.now h2{margin:0;font-family:var(--display);font-stretch:112%;font-size:20px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now small{color:var(--muted);font-family:var(--mono);font-size:12px}
+.badge{font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:3px 7px;border-radius:4px;border:1px solid var(--line);color:var(--muted);flex:none}
+.badge.live{color:var(--live);border-color:#ff5a5a66}
+.badge.err{color:var(--accent);border-color:#ffb54766}
+.now .spacer{flex:1}
+.status{font-size:13px;color:var(--muted);min-height:1.4em}
+.status.err{color:var(--accent)}
+
+.guide{background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0;min-width:0}
+@media (max-width:820px){.guide{max-height:70vh}}
+.tools{padding:12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.tools .row{display:flex;gap:8px}
+.tools input,.tools select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;flex:1}
+.tabs{display:flex;gap:6px}
+.tab{background:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--muted)}
+.tab[aria-pressed="true"]{color:#1a1205;background:var(--accent);border-color:var(--accent);font-weight:700}
+.count{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted);align-self:center}
+ul{list-style:none;margin:0;padding:6px;overflow-y:auto;flex:1}
+li{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer}
+li:hover{background:#ffffff08}
+li.on{background:#ffb5471a}
+li.on .nm{color:var(--accent)}
+li .num{font-family:var(--mono);font-size:12px;color:var(--muted);width:3.2ch;text-align:right;font-variant-numeric:tabular-nums;flex:none}
+li .logo{width:34px;height:34px;border-radius:6px}
+li .txt{min-width:0;flex:1}
+li .nm{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.star{background:none;border:0;font-size:18px;color:var(--line);padding:4px;flex:none;line-height:1}
+.star.fav{color:var(--accent)}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.hint{font-size:12px;color:var(--muted)}
+@media (pointer:coarse){.hint{display:none}}
+.hint code{font-family:var(--mono);color:var(--fg)}
+@media (prefers-reduced-motion:no-preference){.brand i{animation:pulse 2s infinite}@keyframes pulse{50%{opacity:.35}}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i aria-hidden="true"></i>Canal Libre</div>
+  <form class="loader" id="urlForm">
+    <input id="urlInput" type="url" placeholder="URL d'une playlist .m3u / .m3u8 ou d'un flux" aria-label="URL de playlist ou de flux">
+    <button class="btn primary" type="submit">Charger</button>
+    <label class="btn" for="fileInput">Fichier…</label>
+    <input id="fileInput" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/vnd.apple.mpegurl" hidden>
+  </form>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="screen">
+      <video id="video" controls playsinline></video>
+      <div class="overlay" id="overlay"><strong>Aucune chaîne</strong><span>Choisissez une chaîne dans la liste.</span></div>
+    </div>
+    <div class="now">
+      <img id="nowLogo" alt="" hidden>
+      <div class="t"><h2 id="nowName">—</h2><small id="nowGroup">Prêt</small></div>
+      <span class="spacer"></span>
+      <span class="badge" id="nowBadge">HORS LIGNE</span>
+      <button class="btn" id="prevBtn" title="Chaîne précédente (↑)">▲</button>
+      <button class="btn" id="nextBtn" title="Chaîne suivante (↓)">▼</button>
+      <button class="btn" id="fsBtn" title="Plein écran (F)">⛶</button>
+    </div>
+    <div class="status" id="status"></div>
+    <p class="hint">Raccourcis : <code>↑</code>/<code>↓</code> zapper · <code>F</code> plein écran · <code>M</code> muet · <code>/</code> rechercher</p>
+  </section>
+
+  <aside class="guide">
+    <div class="tools">
+      <div class="row">
+        <input id="search" type="search" placeholder="Rechercher une chaîne" aria-label="Rechercher">
+        <select id="group" aria-label="Catégorie"><option value="">Toutes catégories</option></select>
+      </div>
+      <div class="tabs">
+        <button class="tab" id="tabAll" aria-pressed="true">Toutes</button>
+        <button class="tab" id="tabFav" aria-pressed="false">★ Favoris</button>
+        <span class="count" id="count">0</span>
+      </div>
+    </div>
+    <ul id="list"></ul>
+  </aside>
+</main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const video=$("video"), list=$("list"), statusEl=$("status");
+  const store = {
+    get(k,d){try{const v=localStorage.getItem("canal:"+k);return v?JSON.parse(v):d}catch(e){return d}},
+    set(k,v){try{localStorage.setItem("canal:"+k,JSON.stringify(v))}catch(e){}}
+  };
+
+  // Playlist d'exemple : chaînes françaises gratuites et légales recensées par iptv-org
+  const SAMPLE_URL = "https://iptv-org.github.io/iptv/countries/fr.m3u";
+
+  let channels=[], view=[], current=-1, hls=null, onlyFav=false;
+  let favs = new Set(store.get("favs",[]));
+
+  function parseM3U(text){
+    const lines=text.split(/\r?\n/), out=[];
+    let meta=null;
+    for(let raw of lines){
+      const l=raw.trim();
+      if(!l) continue;
+      if(l.startsWith("#EXTINF")){
+        const attr=k=>{const m=l.match(new RegExp(k+'="([^"]*)"','i'));return m?m[1]:""};
+        const comma=l.lastIndexOf(",");
+        meta={name:(comma>-1?l.slice(comma+1):"").trim()||attr("tvg-name"),
+              logo:attr("tvg-logo"),group:attr("group-title")||"Sans catégorie",id:attr("tvg-id")};
+      } else if(l.startsWith("#")){ continue; }
+      else {
+        const m=meta||{name:l.split("/").pop()||l,logo:"",group:"Sans catégorie"};
+        out.push({...m,url:l}); meta=null;
+      }
+    }
+    return out;
+  }
+
+  function setStatus(msg,err){statusEl.textContent=msg||"";statusEl.className="status"+(err?" err":"")}
+
+  function loadText(text,label){
+    let parsed=parseM3U(text);
+    if(!parsed.length){setStatus("Aucune chaîne trouvée dans « "+label+" ». Vérifiez que c'est bien une playlist M3U.",true);return}
+    channels=parsed.map((c,i)=>({...c,n:i+1}));
+    const groups=[...new Set(channels.map(c=>c.group))].sort((a,b)=>a.localeCompare(b,"fr"));
+    $("group").innerHTML='<option value="">Toutes catégories</option>'+groups.map(g=>`<option>${esc(g)}</option>`).join("");
+    setStatus(channels.length+" chaînes chargées depuis « "+label+" ».");
+    render();
+    const last=store.get("last",null);
+    const i=last?channels.findIndex(c=>c.url===last):-1;
+    if(i>-1) select(i,false);
+  }
+
+  async function loadUrl(url){
+    url=url.trim(); if(!url) return;
+    setStatus("Chargement…");
+    // Un lien direct vers un flux (.m3u8 HLS, .mp4, .ts) : on le joue directement
+    try{
+      const r=await fetch(url);
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      const text=await r.text();
+      if(/#EXT-X-(TARGETDURATION|STREAM-INF|MEDIA-SEQUENCE)/.test(text) && !/#EXTINF:-?1/.test(text.split("\n").slice(0,5).join("\n")) && !/tvg-|group-title/.test(text)){
+        channels=[{name:"Flux direct",logo:"",group:"Flux",url,n:1}];render();select(0,true);setStatus("");return;
+      }
+      store.set("playlist",url);
+      loadText(text,url.split("/").pop()||url);
+    }catch(e){
+      // Probablement bloqué par CORS : on tente la lecture directe
+      if(/\.(m3u8|mp4|ts)(\?|$)/i.test(url)){
+        channels=[{name:"Flux direct",logo:"",group:"Flux",url,n:1}];render();select(0,true);setStatus("");
+      } else setStatus("Impossible de lire cette playlist ("+e.message+"). Le serveur bloque peut-être l'accès depuis un navigateur : téléchargez le fichier .m3u et ouvrez-le avec « Fichier… ».",true);
+    }
+  }
+
+  function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+  function render(){
+    const q=$("search").value.trim().toLowerCase(), g=$("group").value;
+    view=channels.filter(c=>(!g||c.group===g)&&(!q||c.name.toLowerCase().includes(q))&&(!onlyFav||favs.has(c.url)));
+    $("count").textContent=view.length+" / "+channels.length;
+    if(!view.length){
+      list.innerHTML=`<li class="empty" style="cursor:default">${channels.length?(onlyFav?"Aucun favori. Touchez ☆ à côté d'une chaîne pour l'ajouter.":"Aucune chaîne ne correspond."):"Chargez une playlist M3U pour commencer."}</li>`;
+      return;
+    }
+    list.innerHTML=view.map(c=>{
+      const i=channels.indexOf(c);
+      return `<li data-i="${i}" class="${i===current?"on":""}">
+        <span class="num">${c.n}</span>
+        ${c.logo?`<img class="logo" loading="lazy" src="${esc(c.logo)}" alt="" onerror="this.style.visibility='hidden'">`:`<span class="logo"></span>`}
+        <span class="txt"><span class="nm">${esc(c.name)}</span><span class="gr">${esc(c.group)}</span></span>
+        <button class="star ${favs.has(c.url)?"fav":""}" data-fav="${i}" aria-label="Favori">${favs.has(c.url)?"★":"☆"}</button>
+      </li>`}).join("");
+  }
+
+  function select(i,play=true){
+    if(i<0||i>=channels.length) return;
+    current=i; const c=channels[i];
+    store.set("last",c.url);
+    $("nowName").textContent=c.name;
+    $("nowGroup").textContent=c.n+" · "+c.group;
+    const lg=$("nowLogo"); if(c.logo){lg.src=c.logo;lg.hidden=false;lg.onerror=()=>lg.hidden=true}else lg.hidden=true;
+    list.querySelectorAll("li.on").forEach(el=>el.classList.remove("on"));
+    const li=list.querySelector(`li[data-i="${i}"]`); if(li){li.classList.add("on");li.scrollIntoView({block:"nearest"})}
+    if(play) playUrl(c.url);
+  }
+
+  function badge(txt,cls){const b=$("nowBadge");b.textContent=txt;b.className="badge"+(cls?" "+cls:"")}
+  function overlay(title,sub){const o=$("overlay");if(!title){o.hidden=true;return}o.hidden=false;o.innerHTML=`<strong>${esc(title)}</strong><span>${esc(sub||"")}</span>`}
+
+  function playUrl(url){
+    if(hls){hls.destroy();hls=null}
+    video.removeAttribute("src"); video.load();
+    overlay("Connexion…","");badge("CONNEXION");setStatus("");
+    const isHls=/\.m3u8(\?|$)/i.test(url)||!/\.(mp4|webm|mkv|mp3|aac|ogg)(\?|$)/i.test(url);
+    if(isHls && window.Hls && Hls.isSupported()){
+      hls=new Hls({lowLatencyMode:true,maxBufferLength:30});
+      hls.loadSource(url); hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED,()=>start());
+      hls.on(Hls.Events.ERROR,(e,d)=>{
+        if(!d.fatal) return;
+        if(d.type===Hls.ErrorTypes.MEDIA_ERROR){hls.recoverMediaError();return}
+        fail(d.type===Hls.ErrorTypes.NETWORK_ERROR
+          ?"Flux injoignable : il est hors ligne, géo-restreint, ou son serveur refuse la lecture depuis un navigateur (CORS)."
+          :"Format de flux non pris en charge par le navigateur.");
+      });
+    } else {
+      video.src=url; start();
+    }
+  }
+  function start(){
+    const p=video.play(); if(p&&p.catch) p.catch(()=>{overlay("Appuyez sur ▶ pour lancer la lecture","");badge("PRÊT")});
+  }
+  function fail(msg){overlay("Lecture impossible",msg);badge("ERREUR","err");setStatus(msg,true)}
+  video.addEventListener("playing",()=>{overlay(null);badge("● DIRECT","live")});
+  video.addEventListener("waiting",()=>badge("MISE EN MÉMOIRE"));
+  video.addEventListener("error",()=>{if(!hls)fail("Le navigateur ne peut pas lire ce flux (format non pris en charge ou serveur injoignable).")});
+
+  function step(d){
+    if(!view.length) return;
+    let pos=view.findIndex(c=>channels.indexOf(c)===current);
+    pos=(pos+d+view.length)%view.length;
+    select(channels.indexOf(view[pos]));
+  }
+
+  list.addEventListener("click",e=>{
+    const f=e.target.closest("[data-fav]");
+    if(f){const c=channels[+f.dataset.fav];favs.has(c.url)?favs.delete(c.url):favs.add(c.url);store.set("favs",[...favs]);render();return}
+    const li=e.target.closest("li[data-i]"); if(li) select(+li.dataset.i);
+  });
+  $("search").addEventListener("input",render);
+  $("group").addEventListener("change",render);
+  $("tabAll").onclick=()=>{onlyFav=false;$("tabAll").setAttribute("aria-pressed","true");$("tabFav").setAttribute("aria-pressed","false");render()};
+  $("tabFav").onclick=()=>{onlyFav=true;$("tabFav").setAttribute("aria-pressed","true");$("tabAll").setAttribute("aria-pressed","false");render()};
+  function toggleFs(){try{const p=document.fullscreenElement?document.exitFullscreen():(video.requestFullscreen?video.requestFullscreen():video.webkitEnterFullscreen&&video.webkitEnterFullscreen());p&&p.catch&&p.catch(()=>{})}catch(e){}}
+  $("fsBtn").onclick=toggleFs;
+  $("prevBtn").onclick=()=>step(-1); $("nextBtn").onclick=()=>step(1);
+  $("urlForm").addEventListener("submit",e=>{e.preventDefault();loadUrl($("urlInput").value)});
+  $("fileInput").addEventListener("change",e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader(); r.onload=()=>loadText(r.result,f.name); r.readAsText(f);
+  });
+  document.addEventListener("keydown",e=>{
+    if(e.target.matches("input,select")) { if(e.key==="Escape") e.target.blur(); return }
+    if(e.key==="ArrowDown"){e.preventDefault();step(1)}
+    else if(e.key==="ArrowUp"){e.preventDefault();step(-1)}
+    else if(e.key==="/"){e.preventDefault();$("search").focus()}
+    else if(e.key.toLowerCase()==="m"){video.muted=!video.muted}
+    else if(e.key.toLowerCase()==="f"){toggleFs()}
+  });
+
+  const saved=store.get("playlist",null)||SAMPLE_URL;
+  $("urlInput").value=saved;
+  render();
+  loadUrl(saved);
+})();
+</script>
+</body>
+</html>
