@@ -43,8 +43,8 @@ jobs:
         if: github.ref == 'refs/heads/canal-libre-android'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: canal-libre-v2.0-build${{ github.run_number }}
-          name: Canal Libre 2.0 (build ${{ github.run_number }})
+          tag_name: canal-libre-v2.0.1-build${{ github.run_number }}
+          name: Canal Libre 2.0.1 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           body: "APK Android du lecteur IPTV Canal Libre. Téléchargez CanalLibre.apk ci-dessous et installez-le sur votre téléphone ou box Android."
           files: CanalLibre.apk

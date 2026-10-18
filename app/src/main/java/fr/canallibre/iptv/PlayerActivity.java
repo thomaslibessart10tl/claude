@@ -31,6 +31,7 @@ import androidx.media3.datasource.DefaultDataSource;
 import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.DecoderCounters;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.extractor.DefaultExtractorsFactory;
@@ -65,6 +66,18 @@ public class PlayerActivity extends Activity {
     private final List<String[]> candidates = new ArrayList<>(); // {url, forceHls}
     private int attempt = 0;
     private int resizeMode = 0;
+
+    // Surveillance de l'image : si le son avance mais plus aucune image n'est affichée, on relance le flux
+    private long lastRendered = -1;
+    private int stallSeconds = 0;
+    private int recoveries = 0;
+    private final Runnable watchdog = new Runnable() {
+        @Override
+        public void run() {
+            checkVideo();
+            handler.postDelayed(this, 1000);
+        }
+    };
     private GestureDetector gestures;
 
     private final Runnable hideToast = () -> toastView.setVisibility(View.GONE);
@@ -94,6 +107,7 @@ public class PlayerActivity extends Activity {
         buildPlayer();
         immersive();
         load(index, false);
+        handler.postDelayed(watchdog, 1000);
     }
 
     private int dp(float v) {
@@ -167,6 +181,13 @@ public class PlayerActivity extends Activity {
             topBar.addView(prev, lp);
             topBar.addView(next, lp);
         }
+        TextView reload = chip("↻");
+        reload.setContentDescription("Relancer le flux");
+        reload.setOnClickListener(v -> restartStream("Relance du flux…"));
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rlp.setMarginStart(dp(8));
+        topBar.addView(reload, rlp);
+
         formatBtn = chip("Format : adapté");
         formatBtn.setOnClickListener(v -> cycleResize());
         LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -221,8 +242,8 @@ public class PlayerActivity extends Activity {
                 .setConnectTimeoutMs(15000)
                 .setReadTimeoutMs(30000);
         DefaultExtractorsFactory extractors = new DefaultExtractorsFactory()
-                .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES
-                        | DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
+                // Démarrage sur une vraie image clé (IDR) : évite l'image grise ou déformée au zapping
+                .setTsExtractorFlags(DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS)
                 .setConstantBitrateSeekingEnabled(true);
         DefaultMediaSourceFactory sources = new DefaultMediaSourceFactory(new DefaultDataSource.Factory(this, http), extractors);
         DefaultRenderersFactory renderers = new DefaultRenderersFactory(this)
@@ -305,6 +326,7 @@ public class PlayerActivity extends Activity {
         subView.setText(it.optString("sub", ""));
         if (announce) showToast(it.optString("title", ""), 1800);
 
+        recoveries = 0;
         candidates.clear();
         String url = it.optString("url", "");
         String alt = it.optString("alt", "");
@@ -328,7 +350,54 @@ public class PlayerActivity extends Activity {
         startCandidate(resume);
     }
 
+    private void checkVideo() {
+        if (player == null || !player.isPlaying() || player.getVideoFormat() == null) {
+            stallSeconds = 0;
+            return;
+        }
+        DecoderCounters c = player.getVideoDecoderCounters();
+        if (c == null) {
+            stallSeconds = 0;
+            return;
+        }
+        c.ensureUpdated();
+        long rendered = c.renderedOutputBufferCount;
+        if (rendered == lastRendered) stallSeconds++;
+        else stallSeconds = 0;
+        lastRendered = rendered;
+        if (stallSeconds >= 3) {
+            stallSeconds = 0;
+            recoveries++;
+            // Après 3 relances sans succès sur la même chaîne, on essaie l'autre format (HLS / TS)
+            if ("live".equals(kind) && recoveries >= 3 && attempt < candidates.size() - 1) {
+                attempt++;
+                recoveries = 0;
+                restartStream("Image bloquée : essai dans un autre format…");
+            } else {
+                restartStream("Image bloquée : reprise du flux…");
+            }
+        }
+    }
+
+    private void restartStream(String message) {
+        if (player == null) return;
+        showToast(message, 2000);
+        lastRendered = -1;
+        stallSeconds = 0;
+        if ("live".equals(kind)) {
+            player.stop();
+            startCandidate(0);
+        } else {
+            // Film ou épisode : repartir du même instant vide les décodeurs
+            long pos = Math.max(0, player.getCurrentPosition());
+            player.seekTo(pos);
+            player.setPlayWhenReady(true);
+        }
+    }
+
     private void startCandidate(long positionMs) {
+        lastRendered = -1;
+        stallSeconds = 0;
         String[] c = candidates.get(Math.min(attempt, candidates.size() - 1));
         MediaItem.Builder b = new MediaItem.Builder().setUri(Uri.parse(c[0]));
         if ("1".equals(c[1])) b.setMimeType(MimeTypes.APPLICATION_M3U8);
