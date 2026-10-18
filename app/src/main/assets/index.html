@@ -4,345 +4,645 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Canal Libre</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap">
-<script src="hls.min.js"></script>
-<script>if(!window.Hls)document.write('<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"><\/script>')</script>
 <style>
-/* Layout : régie de diffusion — lecteur à gauche, grille des chaînes à droite ; empilés sur mobile */
+/* Layout : application TV — bandeau à onglets, barre de filtres, puis liste de chaînes ou grille d'affiches ; fiches en panneau plein écran */
 :root{
-  --bg:#0c0f14; --panel:#141922; --line:#232b38; --fg:#e8ecf2; --muted:#8792a3;
-  --accent:#ffb547; --live:#ff5a5a; --ok:#4fd1a5;
+  --bg:#0c0f14; --panel:#141922; --raise:#1b2230; --line:#232b38; --fg:#e8ecf2; --muted:#8792a3;
+  --accent:#ffb547; --on-accent:#1a1205; --live:#ff5a5a; --ok:#4fd1a5;
   --display:"Archivo", system-ui, sans-serif;
   --body:"Archivo", system-ui, sans-serif;
   --mono:"JetBrains Mono", ui-monospace, monospace;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{height:100%}
+[hidden]{display:none!important}
+html{background:var(--bg)}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--body);
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  padding-bottom:max(16px,env(safe-area-inset-bottom,0px))}
+body.locked{overflow:hidden}
 button,input,select{font:inherit;color:inherit}
-button{cursor:pointer}
+button{cursor:pointer;background:none;border:0;padding:0;text-align:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+img{max-width:100%}
 
-header{display:flex;align-items:center;gap:14px;padding-block:14px;flex-wrap:wrap}
-.brand{font-family:var(--display);font-stretch:118%;font-weight:800;font-size:22px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
-.brand i{width:10px;height:10px;border-radius:50%;background:var(--live);box-shadow:0 0 0 4px #ff5a5a33;display:inline-block}
-.loader{display:flex;gap:8px;flex:1;min-width:260px}
-.loader input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
-.btn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 14px;white-space:nowrap}
-.btn:hover{border-color:var(--muted)}
-.btn.primary{background:var(--accent);color:#1a1205;border-color:var(--accent);font-weight:700}
+/* En-tête */
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding-top:max(12px,env(safe-area-inset-top,0px));padding-bottom:10px;display:flex;flex-direction:column;gap:10px}
+.top{display:flex;align-items:center;gap:12px}
+.brand{font-family:var(--display);font-stretch:118%;font-weight:800;font-size:21px;letter-spacing:-.01em;display:flex;align-items:center;gap:9px;white-space:nowrap}
+.brand i{width:9px;height:9px;border-radius:50%;background:var(--live);box-shadow:0 0 0 4px #ff5a5a33;display:inline-block}
+.tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px;margin-left:auto}
+.tab{padding:6px 14px;border-radius:999px;font-weight:650;font-size:14px;color:var(--muted);white-space:nowrap}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--on-accent)}
+.acct{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--panel);display:grid;place-items:center;flex:none}
+.acct svg{width:18px;height:18px}
+@media (max-width:560px){.top{flex-wrap:wrap}.tabs{order:3;margin-left:0;width:100%;justify-content:space-between}.tab{flex:1;text-align:center}.acct{margin-left:auto}}
 
-main{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:18px;padding-bottom:18px;height:calc(100% - 70px)}
-@media (max-width:820px){main{grid-template-columns:1fr;height:auto}}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters input,.filters select{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px;min-width:0}
+.filters input{flex:2 1 160px}
+.filters select{flex:1 1 150px;max-width:100%}
+.pill{border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--muted);white-space:nowrap}
+.pill[aria-pressed="true"]{color:var(--on-accent);background:var(--accent);border-color:var(--accent);font-weight:700}
+.count{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 
-.stage{display:flex;flex-direction:column;gap:12px;min-width:0}
-.screen{position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:16/9;max-width:100%;border:1px solid var(--line)}
-video{width:100%;height:100%;display:block;background:#000}
-.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:24px;color:var(--muted);pointer-events:none}
-.overlay strong{color:var(--fg);font-family:var(--display);font-stretch:110%;font-size:18px}
-.now{display:flex;align-items:center;gap:12px;min-width:0}
-.now img,.logo{width:44px;height:44px;border-radius:8px;object-fit:contain;background:var(--panel);border:1px solid var(--line);flex:none}
-.now .t{min-width:0}
-.now h2{margin:0;font-family:var(--display);font-stretch:112%;font-size:20px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.now small{color:var(--muted);font-family:var(--mono);font-size:12px}
-.badge{font-family:var(--mono);font-size:11px;letter-spacing:.08em;padding:3px 7px;border-radius:4px;border:1px solid var(--line);color:var(--muted);flex:none}
-.badge.live{color:var(--live);border-color:#ff5a5a66}
-.badge.err{color:var(--accent);border-color:#ffb54766}
-.now .spacer{flex:1}
-.status{font-size:13px;color:var(--muted);min-height:1.4em}
+.status{font-size:13px;color:var(--muted);min-height:0}
+.status:not(:empty){padding:8px 0}
 .status.err{color:var(--accent)}
 
-.guide{background:var(--panel);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:0;min-width:0}
-@media (max-width:820px){.guide{max-height:70vh}}
-.tools{padding:12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
-.tools .row{display:flex;gap:8px}
-.tools input,.tools select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;flex:1}
-.tabs{display:flex;gap:6px}
-.tab{background:none;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;color:var(--muted)}
-.tab[aria-pressed="true"]{color:#1a1205;background:var(--accent);border-color:var(--accent);font-weight:700}
-.count{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted);align-self:center}
-ul{list-style:none;margin:0;padding:6px;overflow-y:auto;flex:1}
-li{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer}
-li:hover{background:#ffffff08}
-li.on{background:#ffb5471a}
-li.on .nm{color:var(--accent)}
-li .num{font-family:var(--mono);font-size:12px;color:var(--muted);width:3.2ch;text-align:right;font-variant-numeric:tabular-nums;flex:none}
-li .logo{width:34px;height:34px;border-radius:6px}
-li .txt{min-width:0;flex:1}
-li .nm{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.star{background:none;border:0;font-size:18px;color:var(--line);padding:4px;flex:none;line-height:1}
+/* Direct : liste de chaînes */
+.rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.row{display:flex;align-items:center;gap:4px;border-radius:10px}
+.row:hover,.row:focus-within{background:var(--panel)}
+.row .main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:10px}
+.num{font-family:var(--mono);font-size:12px;color:var(--muted);width:4ch;text-align:right;font-variant-numeric:tabular-nums;flex:none}
+.logo{width:40px;height:40px;border-radius:8px;object-fit:contain;background:var(--panel);border:1px solid var(--line);flex:none}
+.txt{min-width:0;flex:1;display:flex;flex-direction:column}
+.nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub b{color:var(--fg);font-weight:500}
+.ibtn{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--muted);flex:none;font-size:18px}
+.ibtn:hover{color:var(--fg)}
+.ibtn svg{width:20px;height:20px}
 .star.fav{color:var(--accent)}
-.empty{padding:28px 16px;text-align:center;color:var(--muted)}
-.hint{font-size:12px;color:var(--muted)}
-@media (pointer:coarse){.hint{display:none}}
-[hidden]{display:none!important}
-#xtBtn{margin-left:auto}
-.xtream{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;padding-bottom:14px}
-.xtream input{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
-.hint code{font-family:var(--mono);color:var(--fg)}
-@media (prefers-reduced-motion:no-preference){.brand i{animation:pulse 2s infinite}@keyframes pulse{50%{opacity:.35}}}
+.arch{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--ok);border:1px solid #4fd1a555;border-radius:4px;padding:0 4px;margin-left:6px;vertical-align:2px}
+
+/* Films / Séries : grille d'affiches */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:14px 10px}
+.poster{display:flex;flex-direction:column;gap:6px;min-width:0;border-radius:10px}
+.poster .img{position:relative;aspect-ratio:2/3;max-width:100%;border-radius:10px;overflow:hidden;background:var(--panel);border:1px solid var(--line)}
+.poster img{width:100%;height:100%;object-fit:cover;display:block}
+.poster .ph{position:absolute;inset:0;display:grid;place-items:center;padding:10px;text-align:center;font-family:var(--display);font-stretch:110%;font-weight:700;font-size:14px;color:var(--muted)}
+.poster .pt{font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.poster .rt{position:absolute;top:6px;right:6px;background:#000a;border-radius:5px;padding:1px 6px;font-family:var(--mono);font-size:11px}
+.bar{position:absolute;left:0;bottom:0;height:4px;background:var(--accent)}
+.more{display:block;margin:18px auto 0;padding:10px 18px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.empty{padding:40px 12px;text-align:center;color:var(--muted)}
+.empty .btn{margin-top:14px}
+
+/* Boutons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--raise);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-weight:600;white-space:nowrap;text-decoration:none;color:var(--fg)}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}
+.btn.small{padding:6px 12px;font-size:13px}
+
+/* Panneau (fiches, compte, guide) */
+.sheet{position:fixed;inset:0;z-index:20;background:var(--bg);overflow-y:auto;
+  padding:max(14px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet .wrap{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.sheet .bar-top{display:flex;align-items:center;gap:10px;position:sticky;top:0;background:var(--bg);padding-block:4px;z-index:1}
+.sheet .bar-top h2{margin:0;font-family:var(--display);font-stretch:112%;font-size:19px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet h3{margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:650}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.form{display:grid;gap:8px}
+.form input{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0;width:100%}
+.form .row2{display:flex;gap:8px;flex-wrap:wrap}
+.form .row2 input{flex:1 1 220px;width:auto}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-variant-numeric:tabular-nums}
+.ok{color:var(--ok)}
+
+.hero{display:flex;gap:16px;align-items:flex-start}
+.hero .cover{width:150px;flex:none;aspect-ratio:2/3;max-width:38%;border-radius:12px;object-fit:cover;background:var(--panel);border:1px solid var(--line)}
+.hero .info{min-width:0;display:flex;flex-direction:column;gap:10px}
+.hero h1{margin:0;font-family:var(--display);font-stretch:112%;font-size:24px;line-height:1.15;text-wrap:balance}
+.meta{color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:4px 12px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.plot{margin:0;line-height:1.55;max-width:65ch}
+.credits{font-size:13.5px;color:var(--muted);margin:0}
+.credits b{color:var(--fg);font-weight:500}
+
+.seasons{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.eps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ep{display:flex;gap:12px;align-items:center;padding:8px;border-radius:12px;background:var(--panel);border:1px solid var(--line);width:100%}
+.ep .thumb{position:relative;width:112px;flex:none;aspect-ratio:16/9;max-width:34%;border-radius:8px;overflow:hidden;background:var(--raise)}
+.ep .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.ep .thumb .n{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);color:var(--muted)}
+.ep .t{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.ep .t .nm{white-space:normal}
+
+/* Guide TV */
+.now{display:flex;flex-direction:column;gap:8px}
+.now .ttl{font-family:var(--display);font-stretch:108%;font-size:20px;font-weight:700}
+.prog{height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.prog span{display:block;height:100%;background:var(--accent)}
+.times{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.epg{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.epg li{display:flex;gap:14px;padding:10px 4px;border-top:1px solid var(--line)}
+.epg li:first-child{border-top:0}
+.epg .tm{font-family:var(--mono);font-size:13px;color:var(--muted);width:5ch;flex:none;font-variant-numeric:tabular-nums;padding-top:1px}
+.epg .tx{min-width:0;flex:1}
+.epg .tx p{margin:2px 0 0;font-size:13px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.epg button.tx{display:block;width:100%}
+.epg .play{color:var(--ok);font-size:12px;font-weight:700;letter-spacing:.04em}
+.day{padding:12px 0 6px;font-weight:700}
+.day::first-letter{text-transform:uppercase}
+.spin{color:var(--muted);font-size:14px;padding:6px 0}
 </style>
 </head>
 <body>
+
 <header>
-  <div class="brand"><i aria-hidden="true"></i>Canal Libre</div>
-  <button class="btn" id="xtBtn" type="button" aria-expanded="false">Identifiants</button>
-  <form class="loader" id="urlForm" novalidate>
-    <input id="urlInput" type="text" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="URL d'une playlist .m3u / .m3u8 ou d'un flux" aria-label="URL de playlist ou de flux">
-    <button class="btn primary" type="submit">Charger</button>
-    <label class="btn" for="fileInput">Fichier…</label>
-    <input id="fileInput" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/vnd.apple.mpegurl" hidden>
-  </form>
+  <div class="top">
+    <div class="brand"><i aria-hidden="true"></i>Canal Libre</div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-live" data-tab="live" aria-selected="true">Direct</button>
+      <button class="tab" role="tab" id="tab-vod" data-tab="vod" aria-selected="false">Films</button>
+      <button class="tab" role="tab" id="tab-series" data-tab="series" aria-selected="false">Séries</button>
+    </nav>
+    <button class="acct" id="acctBtn" aria-label="Compte et playlists">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+    </button>
+  </div>
+  <div class="filters">
+    <input id="q" type="search" placeholder="Rechercher" aria-label="Rechercher" autocomplete="off">
+    <select id="cat" aria-label="Catégorie"></select>
+    <button class="pill" id="favOnly" aria-pressed="false">★ Favoris</button>
+    <span class="count" id="count"></span>
+  </div>
+  <div class="status" id="status" role="status"></div>
 </header>
-<form class="xtream" id="xtForm" novalidate hidden>
-  <input id="xtServer" type="text" inputmode="url" placeholder="Serveur (ex. http://monserveur.tv:8080)" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Serveur">
-  <input id="xtUser" type="text" placeholder="Identifiant" autocomplete="username" autocapitalize="off" spellcheck="false" aria-label="Identifiant">
-  <input id="xtPass" type="password" placeholder="Mot de passe" autocomplete="current-password" aria-label="Mot de passe">
-  <button class="btn primary" type="submit">Se connecter</button>
-</form>
 
-<main>
-  <section class="stage">
-    <div class="screen">
-      <video id="video" controls playsinline></video>
-      <div class="overlay" id="overlay"><strong>Aucune chaîne</strong><span>Choisissez une chaîne dans la liste.</span></div>
-    </div>
-    <div class="now">
-      <img id="nowLogo" alt="" hidden>
-      <div class="t"><h2 id="nowName">—</h2><small id="nowGroup">Prêt</small></div>
-      <span class="spacer"></span>
-      <span class="badge" id="nowBadge">HORS LIGNE</span>
-      <button class="btn" id="prevBtn" title="Chaîne précédente (↑)">▲</button>
-      <button class="btn" id="nextBtn" title="Chaîne suivante (↓)">▼</button>
-      <button class="btn" id="fsBtn" title="Plein écran (F)">⛶</button>
-    </div>
-    <div class="status" id="status"></div>
-    <p class="hint">Raccourcis : <code>↑</code>/<code>↓</code> zapper · <code>F</code> plein écran · <code>M</code> muet · <code>/</code> rechercher</p>
-  </section>
+<main id="content"></main>
 
-  <aside class="guide">
-    <div class="tools">
-      <div class="row">
-        <input id="search" type="search" placeholder="Rechercher une chaîne" aria-label="Rechercher">
-        <select id="group" aria-label="Catégorie"><option value="">Toutes catégories</option></select>
-      </div>
-      <div class="tabs">
-        <button class="tab" id="tabAll" aria-pressed="true">Toutes</button>
-        <button class="tab" id="tabFav" aria-pressed="false">★ Favoris</button>
-        <span class="count" id="count">0</span>
-      </div>
-    </div>
-    <ul id="list"></ul>
-  </aside>
-</main>
+<section class="sheet" id="sheet" hidden aria-modal="true" role="dialog"></section>
 
 <script>
 (function(){
-  const $ = id => document.getElementById(id);
-  const video=$("video"), list=$("list"), statusEl=$("status");
-  const store = {
-    get(k,d){try{const v=localStorage.getItem("canal:"+k);return v?JSON.parse(v):d}catch(e){return d}},
-    set(k,v){try{localStorage.setItem("canal:"+k,JSON.stringify(v))}catch(e){}}
-  };
+"use strict";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const store={
+  get(k,d){try{const v=localStorage.getItem("canal:"+k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem("canal:"+k,JSON.stringify(v))}catch(e){}}
+};
+const APP=!!window.Android;
+const DEMO_URL="https://iptv-org.github.io/iptv/countries/fr.m3u";
+const PAGE=120;
 
-  // Playlist d'exemple : chaînes françaises gratuites et légales recensées par iptv-org
-  const SAMPLE_URL = "https://iptv-org.github.io/iptv/countries/fr.m3u";
+/* ---------- État ---------- */
+const S={
+  src: store.get("source",null),
+  fmt: store.get("fmt","ts"),
+  tab: "live",
+  favs: new Set(store.get("favs",[])),
+  progress: {},
+  account: null,
+  data:{ live:null, vod:null, series:null },
+  loading:{},
+  filt:{ live:{cat:"",q:"",fav:false}, vod:{cat:"",q:""}, series:{cat:"",q:""} },
+  limit: PAGE
+};
+// Ancienne version : reprendre les identifiants ou la playlist déjà saisis
+if(!S.src){
+  const xt=store.get("xtream",null), pl=store.get("playlist",null);
+  if(xt&&xt.server&&xt.user) S.src={type:"xtream",server:xt.server,user:xt.user,pass:xt.pass};
+  else if(pl) S.src={type:"m3u",url:pl};
+}
 
-  let channels=[], view=[], current=-1, hls=null, onlyFav=false;
-  let favs = new Set(store.get("favs",[]));
+function setStatus(msg,err){const s=$("status");s.textContent=msg||"";s.className="status"+(err?" err":"")}
+function readProgress(){try{S.progress=APP?JSON.parse(Android.progress()||"{}"):{}}catch(e){S.progress={}}}
 
-  function parseM3U(text){
-    const lines=text.split(/\r?\n/), out=[];
-    let meta=null;
-    for(let raw of lines){
-      const l=raw.trim();
-      if(!l) continue;
-      if(l.startsWith("#EXTINF")){
-        const attr=k=>{const m=l.match(new RegExp(k+'="([^"]*)"','i'));return m?m[1]:""};
-        // Le nom commence après la première virgule hors guillemets (il peut lui-même contenir des virgules)
-        let comma=-1,q=false;
-        for(let k=0;k<l.length;k++){const ch=l[k];if(ch==='"')q=!q;else if(ch===","&&!q){comma=k;break}}
-        meta={name:(comma>-1?l.slice(comma+1):"").trim()||attr("tvg-name"),
-              logo:attr("tvg-logo"),group:attr("group-title")||"Sans catégorie",id:attr("tvg-id")};
-      } else if(l.startsWith("#")){ continue; }
-      else {
-        const m=meta||{name:l.split("/").pop()||l,logo:"",group:"Sans catégorie"};
-        out.push({...m,url:l}); meta=null;
-      }
-    }
-    return out;
+/* ---------- Réseau ---------- */
+function httpMsg(s,body){
+  if(s===599) return body||"Serveur injoignable.";
+  if(s===401||s===403) return "Le serveur refuse l'accès (erreur "+s+") : identifiant ou mot de passe incorrect, abonnement expiré, ou trop d'appareils connectés.";
+  if(s===404) return "Adresse introuvable sur le serveur (erreur 404). Vérifiez l'adresse et le port.";
+  return "Le serveur a répondu avec l'erreur "+s+".";
+}
+async function getText(url){
+  let r;
+  try{ r=await fetch(url) }
+  catch(e){ throw new Error("Connexion au serveur impossible : vérifiez l'adresse et le port, et votre connexion Internet.") }
+  if(!r.ok) throw new Error(httpMsg(r.status, r.status===599?await r.text():""));
+  return r.text();
+}
+function xbase(){const s=S.src;return s.server}
+function xq(){const s=S.src;return "username="+encodeURIComponent(s.user)+"&password="+encodeURIComponent(s.pass)}
+async function api(action,extra){
+  const url=xbase()+"/player_api.php?"+xq()+(action?"&action="+action:"")+(extra?"&"+extra:"");
+  const t=await getText(url);
+  try{ return JSON.parse(t) }catch(e){ throw new Error("Réponse inattendue du serveur. Vérifiez l'adresse du serveur.") }
+}
+const P=s=>encodeURIComponent(s);
+function liveUrl(id,fmt){const s=S.src;return `${s.server}/live/${P(s.user)}/${P(s.pass)}/${id}.${fmt}`}
+function vodUrl(id,ext){const s=S.src;return `${s.server}/movie/${P(s.user)}/${P(s.pass)}/${id}.${ext||"mp4"}`}
+function epUrl(id,ext){const s=S.src;return `${s.server}/series/${P(s.user)}/${P(s.pass)}/${id}.${ext||"mp4"}`}
+function shiftUrls(id,startStr,mins){
+  const s=S.src; const m=String(startStr||"").match(/(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})/);
+  if(!m) return null;
+  const st=`${m[1]}:${m[2]}-${m[3]}`;
+  return { url:`${s.server}/timeshift/${P(s.user)}/${P(s.pass)}/${mins}/${st}/${id}.ts`,
+           alt:`${s.server}/streaming/timeshift.php?${xq()}&stream=${id}&start=${st}&duration=${mins}` };
+}
+
+/* ---------- Lecture ---------- */
+function play(kind,items,index){
+  if(!items.length) return;
+  if(APP){ Android.play(JSON.stringify({kind,index,items})); return }
+  setStatus("La lecture se fait dans l'application Android Canal Libre.",true);
+}
+function playLive(view,pos){
+  // On envoie au lecteur jusqu'à 400 chaînes autour de celle choisie, pour zapper
+  const from=Math.max(0,Math.min(pos-200,view.length-400)), slice=view.slice(from,from+400);
+  const other=S.fmt==="ts"?"m3u8":"ts";
+  play("live",slice.map(c=>({
+    url:c.id!=null?liveUrl(c.id,S.fmt):c.url,
+    alt:c.id!=null?liveUrl(c.id,other):"",
+    title:(c.num?c.num+" · ":"")+c.name, sub:c.catName||""
+  })),pos-from);
+  store.set("lastLive",view[pos].key);
+}
+
+/* ---------- Playlists M3U ---------- */
+function parseM3U(text){
+  const out=[]; let meta=null;
+  for(const raw of text.split(/\r?\n/)){
+    const l=raw.trim(); if(!l) continue;
+    if(l.startsWith("#EXTINF")){
+      const attr=k=>{const m=l.match(new RegExp(k+'="([^"]*)"','i'));return m?m[1]:""};
+      let comma=-1,q=false;
+      for(let k=0;k<l.length;k++){const ch=l[k];if(ch==='"')q=!q;else if(ch===","&&!q){comma=k;break}}
+      meta={name:(comma>-1?l.slice(comma+1):"").trim()||attr("tvg-name"),logo:attr("tvg-logo"),group:attr("group-title")||"Sans catégorie"};
+    } else if(l.startsWith("#")) continue;
+    else { out.push({...(meta||{name:l.split("/").pop()||l,logo:"",group:"Sans catégorie"}),url:l}); meta=null }
   }
+  return out;
+}
+function catsFrom(list){const seen=new Map();list.forEach(x=>{if(!seen.has(x.cat))seen.set(x.cat,{id:x.cat,name:x.cat})});return [...seen.values()]}
+async function loadM3U(url,textIn,label){
+  setStatus("Chargement de la playlist…");
+  let text=textIn;
+  if(text==null){ if(!/^[a-z]+:\/\//i.test(url)) url="http://"+url; text=await getText(url) }
+  const all=parseM3U(text);
+  if(!all.length) throw new Error("Aucune chaîne trouvée dans "+(label||"cette playlist")+". Vérifiez que c'est bien une playlist M3U.");
+  const live=[],vod=[],ser=[];
+  all.forEach((c,i)=>{
+    const o={key:c.url,url:c.url,name:c.name,logo:c.logo,cat:c.group,catName:c.group};
+    if(/\/series\//i.test(c.url)) ser.push({...o,cover:c.logo,flat:true});
+    else if(/\/movie\//i.test(c.url)||/\.(mp4|mkv|avi)(\?|$)/i.test(c.url)) vod.push({...o,cover:c.logo,flat:true});
+    else live.push({...o,num:live.length+1});
+  });
+  S.data.live={cats:catsFrom(live),items:live};
+  S.data.vod={cats:catsFrom(vod),items:vod};
+  S.data.series={cats:catsFrom(ser),items:ser};
+  setStatus(all.length+" entrées chargées"+(label?" depuis "+label:"")+".");
+}
 
-  function setStatus(msg,err){statusEl.textContent=msg||"";statusEl.className="status"+(err?" err":"")}
+/* ---------- Xtream ---------- */
+async function loginXtream(){
+  setStatus("Connexion au serveur…");
+  const d=await api("");
+  const u=d&&d.user_info;
+  if(!u) throw new Error("Ce serveur ne répond pas comme un serveur Xtream. Vérifiez l'adresse et le port.");
+  if(String(u.auth)==="0") throw new Error("Identifiant ou mot de passe refusé par le serveur.");
+  if(u.status&&u.status!=="Active") throw new Error("Abonnement « "+u.status+" » : le serveur refuse la connexion.");
+  S.account=d; setStatus("");
+}
+async function loadXtream(kind){
+  if(S.data[kind]||S.loading[kind]) return;
+  S.loading[kind]=true; render();
+  const A={live:["get_live_categories","get_live_streams"],vod:["get_vod_categories","get_vod_streams"],series:["get_series_categories","get_series"]}[kind];
+  try{
+    const [cats,list]=await Promise.all([api(A[0]),api(A[1])]);
+    const cmap=new Map((Array.isArray(cats)?cats:[]).map(c=>[String(c.category_id),c.category_name]));
+    const arr=Array.isArray(list)?list:Object.values(list||{});
+    let items;
+    if(kind==="live") items=arr.map((c,i)=>({key:"L"+c.stream_id,id:c.stream_id,num:c.num||i+1,name:c.name,logo:c.stream_icon,cat:String(c.category_id),catName:cmap.get(String(c.category_id))||"",archive:+c.tv_archive===1,archiveDays:+c.tv_archive_duration||0}));
+    else if(kind==="vod") items=arr.map(c=>({key:"V"+c.stream_id,id:c.stream_id,name:c.name,cover:c.stream_icon,cat:String(c.category_id),ext:c.container_extension,rating:c.rating_5based?(+c.rating_5based*2):+c.rating||0}));
+    else items=arr.map(c=>({key:"S"+c.series_id,id:c.series_id,name:c.name,cover:c.cover,cat:String(c.category_id),rating:c.rating_5based?(+c.rating_5based*2):+c.rating||0,plot:c.plot,genre:c.genre,year:(c.releaseDate||c.release_date||"").slice(0,4)}));
+    const used=new Set(items.map(x=>x.cat));
+    S.data[kind]={cats:[...cmap].filter(([id])=>used.has(id)).map(([id,name])=>({id,name})),items};
+  }catch(e){ setStatus(e.message,true) }
+  finally{ S.loading[kind]=false; render() }
+}
 
-  function loadText(text,label){
-    let parsed=parseM3U(text);
-    if(!parsed.length){setStatus("Aucune chaîne trouvée dans « "+label+" ». Vérifiez que c'est bien une playlist M3U.",true);return}
-    channels=parsed.map((c,i)=>({...c,n:i+1}));
-    const groups=[...new Set(channels.map(c=>c.group))].sort((a,b)=>a.localeCompare(b,"fr"));
-    $("group").innerHTML='<option value="">Toutes catégories</option>'+groups.map(g=>`<option>${esc(g)}</option>`).join("");
-    setStatus(channels.length+" chaînes chargées depuis « "+label+" ».");
-    render();
-    const last=store.get("last",null);
-    const i=last?channels.findIndex(c=>c.url===last):-1;
-    if(i>-1) select(i,false);
+async function connect(src){
+  S.src=src; store.set("source",src);
+  S.data={live:null,vod:null,series:null}; S.account=null; epgCache.clear();
+  Object.values(S.filt).forEach(f=>{f.cat="";f.q=""});
+  S.tab="live"; render();
+  try{
+    if(src.type==="xtream"){ await loginXtream(); await loadXtream("live") }
+    else { await loadM3U(src.url,src.text||null,src.label); render() }
+    return true;
+  }catch(e){ setStatus(e.message,true); render(); return false }
+}
+
+/* ---------- Guide TV (EPG) ---------- */
+function b64(s){ if(!s) return ""; try{ return new TextDecoder().decode(Uint8Array.from(atob(s),c=>c.charCodeAt(0))) }catch(e){ return s } }
+function tsOf(e,k,str){ const n=+e[k]; if(n>0) return n*1000; const t=Date.parse(String(e[str]||"").replace(" ","T")); return isNaN(t)?0:t }
+function normEpg(e){ return {title:b64(e.title),desc:b64(e.description),start:tsOf(e,"start_timestamp","start"),end:tsOf(e,"stop_timestamp","end"),startStr:e.start,archive:+e.has_archive===1} }
+const hm=t=>new Date(t).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+const epgCache=new Map(); let epgQ=[], epgBusy=0;
+function nowOf(list){const t=Date.now();return (list||[]).find(p=>p.start<=t&&p.end>t)||null}
+function paintNow(id){
+  const c=epgCache.get(id); if(!c) return;
+  const n=nowOf(c.l);
+  document.querySelectorAll(`[data-now="${id}"]`).forEach(el=>{ if(n) el.innerHTML=`<b>${esc(n.title)}</b> · ${hm(n.start)}–${hm(n.end)}` });
+}
+function queueEpg(id){
+  const c=epgCache.get(id);
+  if(c&&Date.now()-c.t<10*60e3){paintNow(id);return}
+  if(epgQ.includes(id)) return; epgQ.push(id); pump();
+}
+function pump(){
+  while(epgBusy<3&&epgQ.length){
+    const id=epgQ.shift(); epgBusy++;
+    api("get_short_epg","stream_id="+id+"&limit=3")
+      .then(d=>{epgCache.set(id,{t:Date.now(),l:(d&&d.epg_listings||[]).map(normEpg)});paintNow(id)})
+      .catch(()=>epgCache.set(id,{t:Date.now(),l:[]}))
+      .finally(()=>{epgBusy--;pump()});
   }
+}
+const io=("IntersectionObserver" in window)?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){io.unobserve(e.target);queueEpg(+e.target.dataset.now)}}),{rootMargin:"200px"}):null;
 
-  async function loadUrl(url){
-    url=url.trim(); if(!url) return;
-    setStatus("Chargement…");
-    // Un lien direct vers un flux (.m3u8 HLS, .mp4, .ts) : on le joue directement
-    try{
-      if(!/^[a-z]+:\/\//i.test(url)) url="http://"+url;
-      const r=await fetch(url);
-      if(!r.ok) throw new Error(httpMsg(r.status, r.status===599?await r.text():""));
-      const text=await r.text();
-      if(/#EXT-X-(TARGETDURATION|STREAM-INF|MEDIA-SEQUENCE)/.test(text) && !/#EXTINF:-?1/.test(text.split("\n").slice(0,5).join("\n")) && !/tvg-|group-title/.test(text)){
-        channels=[{name:"Flux direct",logo:"",group:"Flux",url,n:1}];render();select(0,true);setStatus("");return;
-      }
-      store.set("playlist",url);
-      loadText(text,url.split("/").pop()||url);
-    }catch(e){
-      // Probablement bloqué par CORS : on tente la lecture directe
-      if(/\.(m3u8|mp4|ts)(\?|$)/i.test(url)){
-        channels=[{name:"Flux direct",logo:"",group:"Flux",url,n:1}];render();select(0,true);setStatus("");
-      } else setStatus("Impossible de lire cette playlist. "+(e instanceof TypeError?"Connexion au serveur impossible : vérifiez l'adresse et le port, et essayez http:// au lieu de https://.":e.message),true);
-    }
+/* ---------- Rendu ---------- */
+const ICON_GUIDE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h8M8 16h5"/></svg>';
+let VIEW=[];
+
+function hasTab(k){ if(k==="live") return true; if(!S.src) return false; if(S.src.type==="xtream") return true; const d=S.data[k]; return !!(d&&d.items.length) }
+
+function renderHeader(){
+  document.querySelectorAll(".tab").forEach(b=>{b.hidden=!hasTab(b.dataset.tab);b.setAttribute("aria-selected",String(b.dataset.tab===S.tab))});
+  const f=S.filt[S.tab], d=S.data[S.tab];
+  $("q").value=f.q;
+  $("q").placeholder=S.tab==="live"?"Rechercher une chaîne":S.tab==="vod"?"Rechercher un film":"Rechercher une série";
+  const cats=d?d.cats:[];
+  $("cat").innerHTML=`<option value="">Toutes les catégories</option>`+cats.map(c=>`<option value="${esc(c.id)}"${c.id===f.cat?" selected":""}>${esc(c.name)}</option>`).join("");
+  $("cat").hidden=!cats.length;
+  $("favOnly").hidden=S.tab!=="live";
+  $("favOnly").setAttribute("aria-pressed",String(!!S.filt.live.fav));
+}
+
+function filtered(){
+  const f=S.filt[S.tab], d=S.data[S.tab]; if(!d) return [];
+  const q=f.q.trim().toLowerCase();
+  return d.items.filter(x=>(!f.cat||x.cat===f.cat)&&(!q||x.name.toLowerCase().includes(q))&&(S.tab!=="live"||!f.fav||S.favs.has(x.key)));
+}
+
+function render(){
+  renderHeader();
+  const box=$("content"), d=S.data[S.tab];
+  if(!S.src){
+    $("count").textContent="";
+    box.innerHTML=`<div class="empty"><p>Aucune playlist pour l'instant.</p><button class="btn primary" data-act="account">Ajouter mon abonnement</button><br><button class="btn small" data-act="demo">Essayer avec des chaînes gratuites</button></div>`;
+    return;
   }
-
-  function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
-
-  function render(){
-    const q=$("search").value.trim().toLowerCase(), g=$("group").value;
-    view=channels.filter(c=>(!g||c.group===g)&&(!q||c.name.toLowerCase().includes(q))&&(!onlyFav||favs.has(c.url)));
-    $("count").textContent=view.length+" / "+channels.length;
-    if(!view.length){
-      list.innerHTML=`<li class="empty" style="cursor:default">${channels.length?(onlyFav?"Aucun favori. Touchez ☆ à côté d'une chaîne pour l'ajouter.":"Aucune chaîne ne correspond."):"Chargez une playlist M3U pour commencer."}</li>`;
-      return;
-    }
-    list.innerHTML=view.slice(0,400).map(c=>{
-      const i=channels.indexOf(c);
-      return `<li data-i="${i}" class="${i===current?"on":""}">
-        <span class="num">${c.n}</span>
+  if(!d){
+    $("count").textContent="";
+    box.innerHTML=S.loading[S.tab]?`<p class="empty">Chargement du catalogue…</p>`:`<div class="empty"><p>Catalogue non chargé.</p><button class="btn" data-act="reload">Réessayer</button></div>`;
+    if(S.src.type==="xtream"&&!S.loading[S.tab]&&!$("status").classList.contains("err")) loadXtream(S.tab);
+    return;
+  }
+  VIEW=filtered();
+  $("count").textContent=VIEW.length+" / "+d.items.length;
+  if(!VIEW.length){
+    const f=S.filt[S.tab];
+    box.innerHTML=`<p class="empty">${S.tab==="live"&&f.fav?"Aucun favori ici. Touchez ☆ à côté d'une chaîne pour l'ajouter.":f.q||f.cat?"Rien ne correspond à cette recherche.":"Cette rubrique est vide."}</p>`;
+    return;
+  }
+  const shown=VIEW.slice(0,S.limit), more=VIEW.length>S.limit?`<button class="more" data-act="more">Afficher ${Math.min(PAGE,VIEW.length-S.limit)} de plus (${VIEW.length-S.limit} restants)</button>`:"";
+  if(S.tab==="live"){
+    const xt=S.src.type==="xtream";
+    box.innerHTML=`<ul class="rows">`+shown.map((c,i)=>`<li class="row">
+      <button class="main" data-play="${i}">
+        <span class="num">${esc(c.num||"")}</span>
         ${c.logo?`<img class="logo" loading="lazy" src="${esc(c.logo)}" alt="" onerror="this.style.visibility='hidden'">`:`<span class="logo"></span>`}
-        <span class="txt"><span class="nm">${esc(c.name)}</span><span class="gr">${esc(c.group)}</span></span>
-        <button class="star ${favs.has(c.url)?"fav":""}" data-fav="${i}" aria-label="Favori">${favs.has(c.url)?"★":"☆"}</button>
-      </li>`}).join("")+(view.length>400?`<li class="empty" style="cursor:default">${view.length-400} autres chaînes : utilisez la recherche ou les catégories.</li>`:"");
-  }
-
-  function select(i,play=true){
-    if(i<0||i>=channels.length) return;
-    current=i; const c=channels[i];
-    store.set("last",c.url);
-    $("nowName").textContent=c.name;
-    $("nowGroup").textContent=c.n+" · "+c.group;
-    const lg=$("nowLogo"); if(c.logo){lg.src=c.logo;lg.hidden=false;lg.onerror=()=>lg.hidden=true}else lg.hidden=true;
-    list.querySelectorAll("li.on").forEach(el=>el.classList.remove("on"));
-    const li=list.querySelector(`li[data-i="${i}"]`); if(li){li.classList.add("on");li.scrollIntoView({block:"nearest"})}
-    if(play) playUrl(c.url);
-  }
-
-  function badge(txt,cls){const b=$("nowBadge");b.textContent=txt;b.className="badge"+(cls?" "+cls:"")}
-  function overlay(title,sub){const o=$("overlay");if(!title){o.hidden=true;return}o.hidden=false;o.innerHTML=`<strong>${esc(title)}</strong><span>${esc(sub||"")}</span>`}
-
-  // Xtream : un flux .ts ou sans extension est demandé en HLS (.m3u8), lisible par le lecteur
-  function xtreamHls(u){
-    const m=u.match(/^(https?:\/\/[^\/]+)\/(?:live\/)?([^\/]+)\/([^\/]+)\/(\d+)(?:\.ts)?$/i);
-    return m?`${m[1]}/live/${m[2]}/${m[3]}/${m[4]}.m3u8`:u;
-  }
-  function httpMsg(s,body){
-    if(s===599) return body||"Serveur injoignable.";
-    if(s===401||s===403) return "Le serveur refuse l'accès (erreur "+s+") : identifiant ou mot de passe incorrect, abonnement expiré, ou trop d'appareils connectés.";
-    if(s===404) return "Adresse introuvable sur le serveur (erreur 404). Vérifiez l'adresse et le port.";
-    return "Le serveur a répondu avec l'erreur "+s+".";
-  }
-
-  function playUrl(url){
-    url=xtreamHls(url);
-    if(hls){hls.destroy();hls=null}
-    video.removeAttribute("src"); video.load();
-    overlay("Connexion…","");badge("CONNEXION");setStatus("");
-    const isHls=/\.m3u8(\?|$)/i.test(url)||!/\.(mp4|webm|mkv|mp3|aac|ogg)(\?|$)/i.test(url);
-    if(isHls && window.Hls && Hls.isSupported()){
-      hls=new Hls({lowLatencyMode:true,maxBufferLength:30});
-      hls.loadSource(url); hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED,()=>start());
-      hls.on(Hls.Events.ERROR,(e,d)=>{
-        if(!d.fatal) return;
-        if(d.type===Hls.ErrorTypes.MEDIA_ERROR){hls.recoverMediaError();return}
-        fail(d.type===Hls.ErrorTypes.NETWORK_ERROR
-          ?"Flux injoignable : il est hors ligne, géo-restreint, ou son serveur refuse la lecture depuis un navigateur (CORS)."
-          :"Format de flux non pris en charge par le navigateur.");
+        <span class="txt"><span class="nm">${esc(c.name)}${c.archive?'<span class="arch">REPLAY</span>':""}</span><span class="sub"${xt?` data-now="${c.id}"`:""}>${esc(c.catName)}</span></span>
+      </button>
+      ${xt?`<button class="ibtn" data-guide="${i}" aria-label="Guide TV de ${esc(c.name)}">${ICON_GUIDE}</button>`:""}
+      <button class="ibtn star${S.favs.has(c.key)?" fav":""}" data-fav="${i}" aria-label="Favori">${S.favs.has(c.key)?"★":"☆"}</button>
+    </li>`).join("")+`</ul>`+more;
+    if(xt&&io) box.querySelectorAll("[data-now]").forEach(el=>{ if(epgCache.has(+el.dataset.now)) paintNow(+el.dataset.now); else io.observe(el) });
+  } else {
+    box.innerHTML=`<div class="grid">`+shown.map((x,i)=>{
+      const pr=x.flat?S.progress[x.url]:null, pct=pr&&pr.d?Math.min(100,pr.p/pr.d*100):0;
+      return `<button class="poster" data-open="${i}"><span class="img">
+        ${x.cover?`<img loading="lazy" src="${esc(x.cover)}" alt="" onerror="this.remove()">`:""}<span class="ph"${x.cover?' style="z-index:-1"':""}>${esc(x.name)}</span>
+        ${x.rating?`<span class="rt">★ ${(+x.rating).toFixed(1).replace(".",",")}</span>`:""}
+        ${pct?`<span class="bar" style="width:${pct}%"></span>`:""}
+      </span><span class="pt">${esc(x.name)}</span></button>`}).join("")+`</div>`+more;
+    // Barre de progression des films Xtream (la clé est l'adresse du film)
+    if(S.src.type==="xtream"&&S.tab==="vod"){
+      box.querySelectorAll("[data-open]").forEach(el=>{
+        const x=VIEW[+el.dataset.open], pr=S.progress[vodUrl(x.id,x.ext)];
+        if(pr&&pr.d){const b=document.createElement("span");b.className="bar";b.style.width=Math.min(100,pr.p/pr.d*100)+"%";el.querySelector(".img").appendChild(b)}
       });
-    } else {
-      video.src=url; start();
     }
   }
-  function start(){
-    const p=video.play(); if(p&&p.catch) p.catch(()=>{overlay("Appuyez sur ▶ pour lancer la lecture","");badge("PRÊT")});
+}
+
+/* ---------- Panneaux ---------- */
+function openSheet(title,html){
+  const sh=$("sheet");
+  sh.innerHTML=`<div class="wrap"><div class="bar-top"><button class="btn small" data-act="close">← Retour</button><h2>${esc(title)}</h2></div>${html}</div>`;
+  sh.hidden=false; sh.scrollTop=0; document.body.classList.add("locked");
+  const f=sh.querySelector("[data-focus]")||sh.querySelector(".btn.primary")||sh.querySelector("button"); f&&f.focus();
+}
+function closeSheet(){ $("sheet").hidden=true; $("sheet").innerHTML=""; document.body.classList.remove("locked") }
+window.onBack=function(){ if(!$("sheet").hidden){closeSheet();return true} return false };
+window.onAppResume=function(){ readProgress(); if($("sheet").hidden) render(); else if(SHEET_REFRESH) SHEET_REFRESH() };
+let SHEET_REFRESH=null;
+
+function fmtDate(ts){ return new Date(ts).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}) }
+function openAccount(){
+  SHEET_REFRESH=null;
+  const s=S.src||{}, a=S.account&&S.account.user_info;
+  let info="";
+  if(s.type==="xtream"){
+    info=`<div class="card"><h3>Abonnement en cours</h3><dl class="kv">
+      <dt>Serveur</dt><dd>${esc(s.server)}</dd><dt>Identifiant</dt><dd>${esc(s.user)}</dd>
+      ${a?`<dt>Statut</dt><dd class="ok">${esc(a.status==="Active"?"Actif":a.status)}</dd>
+      <dt>Expire le</dt><dd>${+a.exp_date?fmtDate(+a.exp_date*1000):"Sans date de fin"}</dd>
+      <dt>Connexions</dt><dd>${esc(a.active_cons||0)} en cours sur ${esc(a.max_connections||"?")} autorisée(s)</dd>`:""}
+    </dl></div>`;
+  } else if(s.type==="m3u"){
+    info=`<div class="card"><h3>Playlist en cours</h3><p class="hint" style="word-break:break-all">${esc(s.label||s.url)}</p></div>`;
   }
-  function fail(msg){overlay("Lecture impossible",msg);badge("ERREUR","err");setStatus(msg,true)}
-  video.addEventListener("playing",()=>{overlay(null);badge("● DIRECT","live")});
-  video.addEventListener("waiting",()=>badge("MISE EN MÉMOIRE"));
-  video.addEventListener("error",()=>{if(!hls)fail("Le navigateur ne peut pas lire ce flux (format non pris en charge ou serveur injoignable).")});
-
-  function step(d){
-    if(!view.length) return;
-    let pos=view.findIndex(c=>channels.indexOf(c)===current);
-    pos=(pos+d+view.length)%view.length;
-    select(channels.indexOf(view[pos]));
-  }
-
-  list.addEventListener("click",e=>{
-    const f=e.target.closest("[data-fav]");
-    if(f){const c=channels[+f.dataset.fav];favs.has(c.url)?favs.delete(c.url):favs.add(c.url);store.set("favs",[...favs]);render();return}
-    const li=e.target.closest("li[data-i]"); if(li) select(+li.dataset.i);
-  });
-  $("search").addEventListener("input",render);
-  $("group").addEventListener("change",render);
-  $("tabAll").onclick=()=>{onlyFav=false;$("tabAll").setAttribute("aria-pressed","true");$("tabFav").setAttribute("aria-pressed","false");render()};
-  $("tabFav").onclick=()=>{onlyFav=true;$("tabFav").setAttribute("aria-pressed","true");$("tabAll").setAttribute("aria-pressed","false");render()};
-  function toggleFs(){try{const p=document.fullscreenElement?document.exitFullscreen():(video.requestFullscreen?video.requestFullscreen():video.webkitEnterFullscreen&&video.webkitEnterFullscreen());p&&p.catch&&p.catch(()=>{})}catch(e){}}
-  $("fsBtn").onclick=toggleFs;
-  $("prevBtn").onclick=()=>step(-1); $("nextBtn").onclick=()=>step(1);
-  $("urlForm").addEventListener("submit",e=>{e.preventDefault();loadUrl($("urlInput").value)});
-  $("fileInput").addEventListener("change",e=>{
-    const f=e.target.files[0]; if(!f) return;
-    const r=new FileReader(); r.onload=()=>loadText(r.result,f.name); r.readAsText(f);
-  });
-  document.addEventListener("keydown",e=>{
-    if(e.target.matches("input,select")) { if(e.key==="Escape") e.target.blur(); return }
-    if(e.key==="ArrowDown"){e.preventDefault();step(1)}
-    else if(e.key==="ArrowUp"){e.preventDefault();step(-1)}
-    else if(e.key==="/"){e.preventDefault();$("search").focus()}
-    else if(e.key.toLowerCase()==="m"){video.muted=!video.muted}
-    else if(e.key.toLowerCase()==="f"){toggleFs()}
-  });
-
-  const xt=store.get("xtream",null);
-  if(xt){$("xtServer").value=xt.server||"";$("xtUser").value=xt.user||"";$("xtPass").value=xt.pass||""}
-  $("xtBtn").onclick=()=>{const f=$("xtForm");f.hidden=!f.hidden;$("xtBtn").setAttribute("aria-expanded",String(!f.hidden));if(!f.hidden)$("xtServer").focus()};
-  $("xtForm").addEventListener("submit",e=>{
+  const x=s.type==="xtream"?s:(store.get("xtream",{})||{});
+  openSheet("Compte et playlists",`${info}
+  <div class="card"><h3>Connexion Xtream</h3>
+    <p class="hint">Les trois informations données par votre fournisseur : adresse du serveur avec son port, identifiant, mot de passe.</p>
+    <form class="form" id="xtForm" novalidate>
+      <input id="xtServer" type="text" inputmode="url" placeholder="Serveur, ex. http://monserveur.tv:8080" value="${esc(x.server||"")}" autocapitalize="off" spellcheck="false" aria-label="Serveur" data-focus>
+      <div class="row2"><input id="xtUser" type="text" placeholder="Identifiant" value="${esc(x.user||"")}" autocapitalize="off" spellcheck="false" aria-label="Identifiant"><input id="xtPass" type="password" placeholder="Mot de passe" value="${esc(x.pass||"")}" aria-label="Mot de passe"></div>
+      <div><button class="btn primary" type="submit">Se connecter</button></div>
+    </form>
+  </div>
+  <div class="card"><h3>Ou une playlist M3U</h3>
+    <form class="form" id="m3uForm" novalidate>
+      <input id="m3uUrl" type="text" inputmode="url" placeholder="Adresse de la playlist (.m3u)" value="${esc(s.type==="m3u"&&!s.text?s.url:"")}" autocapitalize="off" spellcheck="false" aria-label="Adresse de la playlist">
+      <div class="actions"><button class="btn primary" type="submit">Charger</button><label class="btn" for="m3uFile">Ouvrir un fichier…</label><input id="m3uFile" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/vnd.apple.mpegurl,*/*" hidden></div>
+    </form>
+  </div>
+  <div class="card"><h3>Format des chaînes en direct</h3>
+    <p class="hint">MPEG-TS convient à la plupart des serveurs. Si une chaîne ne démarre pas, l'application essaie l'autre format toute seule.</p>
+    <div class="actions"><button class="pill" data-fmt="ts" aria-pressed="${S.fmt==="ts"}">MPEG-TS</button><button class="pill" data-fmt="m3u8" aria-pressed="${S.fmt==="m3u8"}">HLS (m3u8)</button></div>
+  </div>
+  <div class="card"><h3>Démonstration</h3><p class="hint">Chaînes françaises gratuites et légales, recensées par le projet iptv-org.</p><div><button class="btn" data-act="demo">Charger les chaînes gratuites</button></div></div>`);
+  $("xtForm").addEventListener("submit",async e=>{
     e.preventDefault();
-    let server=$("xtServer").value.trim().replace(/\/+$/,"");
+    let server=$("xtServer").value.trim().replace(/\/+$/,"").replace(/\/(get|player_api)\.php.*$/i,"");
     const user=$("xtUser").value.trim(), pass=$("xtPass").value.trim();
     if(!server||!user||!pass){setStatus("Renseignez le serveur, l'identifiant et le mot de passe.",true);return}
     if(!/^https?:\/\//i.test(server)) server="http://"+server;
     store.set("xtream",{server,user,pass});
-    const url=server+"/get.php?username="+encodeURIComponent(user)+"&password="+encodeURIComponent(pass)+"&type=m3u_plus&output=m3u8";
-    $("urlInput").value=url; $("xtForm").hidden=true; $("xtBtn").setAttribute("aria-expanded","false");
-    loadUrl(url);
+    closeSheet();
+    await connect({type:"xtream",server,user,pass});
   });
+  $("m3uForm").addEventListener("submit",async e=>{
+    e.preventDefault(); const url=$("m3uUrl").value.trim(); if(!url) return;
+    closeSheet(); await connect({type:"m3u",url});
+  });
+  $("m3uFile").addEventListener("change",e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader(); r.onload=async()=>{ closeSheet(); await connect({type:"m3u",url:"",text:String(r.result),label:f.name}) }; r.readAsText(f);
+  });
+}
 
-  const saved=store.get("playlist",null)||SAMPLE_URL;
-  $("urlInput").value=saved;
-  render();
-  loadUrl(saved);
+/* Fiche film */
+function fmtDur(min){ min=Math.round(min); return min>=60?Math.floor(min/60)+" h "+String(min%60).padStart(2,"0"):min+" min" }
+async function openMovie(x){
+  if(x.flat){ play("vod",[{url:x.url,title:x.name,sub:x.catName}],0); return }
+  openSheet(x.name,`<p class="spin">Chargement de la fiche…</p>`);
+  let info={}, md={};
+  try{ const d=await api("get_vod_info","vod_id="+x.id); info=d&&d.info||{}; md=d&&d.movie_data||{} }catch(e){}
+  if($("sheet").hidden) return;
+  const ext=md.container_extension||x.ext, url=vodUrl(x.id,ext);
+  const draw=()=>{
+    const pr=S.progress[url], resume=pr&&pr.d&&pr.p>30000&&pr.p<pr.d-90000;
+    const year=(info.releasedate||info.release_date||"").slice(0,4);
+    const dur=info.duration_secs?fmtDur(info.duration_secs/60):info.duration||"";
+    const cover=info.movie_image||info.cover_big||x.cover;
+    const yt=info.youtube_trailer;
+    const item={url,title:x.name,sub:[year,info.genre].filter(Boolean).join(" · "),key:url};
+    $("sheet").querySelector(".wrap").innerHTML=`<div class="bar-top"><button class="btn small" data-act="close">← Retour</button><h2>${esc(x.name)}</h2></div>
+      <div class="hero">${cover?`<img class="cover" src="${esc(cover)}" alt="">`:""}
+        <div class="info"><h1>${esc(info.name||x.name)}</h1>
+          <div class="meta">${[year,dur,info.genre,(info.rating||x.rating)?"★ "+String(info.rating||x.rating).replace(".",","):""].filter(Boolean).map(m=>`<span>${esc(m)}</span>`).join("")}</div>
+          <div class="actions">
+            <button class="btn primary" id="pl" data-focus>▶ ${resume?"Reprendre à "+fmtDur(pr.p/60000):"Lire"}</button>
+            ${resume?`<button class="btn" id="pl0">Depuis le début</button>`:""}
+            ${yt?`<a class="btn" href="https://www.youtube.com/watch?v=${esc(yt)}">Bande-annonce</a>`:""}
+          </div>
+          ${resume?`<div class="prog"><span style="width:${pr.p/pr.d*100}%"></span></div>`:""}
+        </div></div>
+      ${info.plot||info.description?`<p class="plot">${esc(info.plot||info.description)}</p>`:""}
+      ${info.director?`<p class="credits"><b>Réalisation</b> · ${esc(info.director)}</p>`:""}
+      ${info.cast||info.actors?`<p class="credits"><b>Avec</b> · ${esc(info.cast||info.actors)}</p>`:""}`;
+    $("pl").onclick=()=>play("vod",[item],0);
+    if($("pl0")) $("pl0").onclick=()=>play("vod",[{...item,fromStart:true}],0);
+    $("pl").focus();
+  };
+  SHEET_REFRESH=draw; draw();
+}
+
+/* Fiche série */
+async function openSeries(x){
+  if(x.flat){ play("series",[{url:x.url,title:x.name,sub:x.catName,key:x.url}],0); return }
+  openSheet(x.name,`<p class="spin">Chargement des épisodes…</p>`);
+  let d={};
+  try{ d=await api("get_series_info","series_id="+x.id)||{} }catch(e){ setStatus(e.message,true) }
+  if($("sheet").hidden) return;
+  const info=d.info||{}, eps=d.episodes||{};
+  const seasons=Object.keys(eps).sort((a,b)=>+a-+b);
+  let cur=store.get("season:"+x.id,null); if(!seasons.includes(cur)) cur=seasons[0];
+  const draw=()=>{
+    const list=(eps[cur]||[]).slice().sort((a,b)=>(+a.episode_num)-(+b.episode_num));
+    const items=list.map(e=>{const u=epUrl(e.id,e.container_extension);return {url:u,key:u,title:x.name+" · S"+cur+" E"+e.episode_num,sub:e.title||""}});
+    const cover=info.cover||x.cover;
+    // Prochain épisode à regarder : le dernier commencé non terminé, sinon celui qui suit le dernier terminé
+    let next=0,lastT=0;
+    list.forEach((e,i)=>{const p=S.progress[items[i].url]; if(p&&p.t>lastT){lastT=p.t; next=(p.d&&p.p>=p.d-90000)?Math.min(i+1,list.length-1):i}});
+    $("sheet").querySelector(".wrap").innerHTML=`<div class="bar-top"><button class="btn small" data-act="close">← Retour</button><h2>${esc(x.name)}</h2></div>
+      <div class="hero">${cover?`<img class="cover" src="${esc(cover)}" alt="">`:""}
+        <div class="info"><h1>${esc(info.name||x.name)}</h1>
+          <div class="meta">${[(info.releaseDate||x.year||"").slice(0,4),info.genre||x.genre,seasons.length?seasons.length+" saison"+(seasons.length>1?"s":""):""].filter(Boolean).map(m=>`<span>${esc(m)}</span>`).join("")}</div>
+          ${list.length?`<div class="actions"><button class="btn primary" id="plNext" data-focus>▶ ${lastT?"Continuer":"Lire"} : épisode ${esc(list[next].episode_num)}</button></div>`:""}
+        </div></div>
+      ${info.plot||x.plot?`<p class="plot">${esc(info.plot||x.plot)}</p>`:""}
+      ${seasons.length>1?`<div class="seasons">${seasons.map(s=>`<button class="pill" data-season="${esc(s)}" aria-pressed="${s===cur}">Saison ${esc(s)}</button>`).join("")}</div>`:""}
+      ${list.length?`<ul class="eps">${list.map((e,i)=>{const p=S.progress[items[i].url],pct=p&&p.d?Math.min(100,p.p/p.d*100):0,ei=e.info||{};
+        return `<li><button class="ep" data-ep="${i}"><span class="thumb">${ei.movie_image?`<img loading="lazy" src="${esc(ei.movie_image)}" alt="" onerror="this.remove()">`:`<span class="n">E${esc(e.episode_num)}</span>`}${pct?`<span class="bar" style="width:${pct}%"></span>`:""}</span>
+        <span class="t"><span class="nm">${esc(e.episode_num)}. ${esc(e.title||"Épisode "+e.episode_num)}</span><span class="sub">${ei.duration_secs?fmtDur(ei.duration_secs/60):esc(ei.duration||"")}${pct>=99?" · vu":""}</span></span></button></li>`}).join("")}</ul>`:`<p class="empty">Aucun épisode disponible pour cette série.</p>`}`;
+    const sh=$("sheet");
+    sh.querySelectorAll("[data-season]").forEach(b=>b.onclick=()=>{cur=b.dataset.season;store.set("season:"+x.id,cur);draw()});
+    sh.querySelectorAll("[data-ep]").forEach(b=>b.onclick=()=>play("series",items,+b.dataset.ep));
+    if($("plNext")){ $("plNext").onclick=()=>play("series",items,next); $("plNext").focus() }
+  };
+  SHEET_REFRESH=draw; draw();
+}
+
+/* Guide TV + replay d'une chaîne */
+async function openGuide(c){
+  SHEET_REFRESH=null;
+  openSheet(c.name,`<div class="card"><div class="hero" style="align-items:center">${c.logo?`<img class="logo" style="width:56px;height:56px" src="${esc(c.logo)}" alt="">`:""}<div class="info"><div class="meta"><span>${esc(c.catName)}</span>${c.archive?`<span class="ok">Replay sur ${c.archiveDays} jour${c.archiveDays>1?"s":""}</span>`:""}</div></div></div>
+    <div class="actions"><button class="btn primary" id="gLive" data-focus>▶ Regarder en direct</button></div><div id="gNow" class="now"><p class="spin">Chargement du programme…</p></div></div>
+    <div id="gList"></div>`);
+  $("gLive").onclick=()=>{ const i=VIEW.indexOf(c); i>-1?playLive(VIEW,i):playLive([c],0) };
+  let all=[];
+  try{
+    const d=await api("get_simple_data_table","stream_id="+c.id);
+    all=(d&&d.epg_listings||[]).map(normEpg).filter(p=>p.start&&p.end).sort((a,b)=>a.start-b.start);
+  }catch(e){}
+  if(!all.length){ try{ const d=await api("get_short_epg","stream_id="+c.id+"&limit=8"); all=(d&&d.epg_listings||[]).map(normEpg) }catch(e){} }
+  if($("sheet").hidden||!$("gNow")) return;
+  const t=Date.now(), n=nowOf(all);
+  $("gNow").innerHTML=n?`<h3>En ce moment</h3><span class="ttl">${esc(n.title)}</span><div class="prog"><span style="width:${(t-n.start)/(n.end-n.start)*100}%"></span></div><span class="times">${hm(n.start)} – ${hm(n.end)} · encore ${Math.max(1,Math.round((n.end-t)/60000))} min</span>${n.desc?`<p class="hint">${esc(n.desc)}</p>`:""}`
+    :`<p class="hint">Pas de programme disponible pour cette chaîne.</p>`;
+  const upcoming=all.filter(p=>p.start>t).slice(0,12);
+  const past=c.archive?all.filter(p=>p.end<=t&&p.start>=t-c.archiveDays*864e5&&(p.archive||all.every(q=>!q.archive))).reverse():[];
+  const day=ts=>new Date(ts).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+  let html="";
+  if(upcoming.length) html+=`<div class="card"><h3>Ensuite</h3><ul class="epg">${upcoming.map(p=>`<li><span class="tm">${hm(p.start)}</span><span class="tx"><span class="nm">${esc(p.title)}</span>${p.desc?`<p>${esc(p.desc)}</p>`:""}</span></li>`).join("")}</ul></div>`;
+  if(past.length){
+    let lastDay="";
+    html+=`<div class="card"><h3>Replay</h3><ul class="epg">`+past.map((p,i)=>{
+      const d=day(p.start), head=d!==lastDay?`<li class="day">${esc(d)}</li>`:""; lastDay=d;
+      return head+`<li><span class="tm">${hm(p.start)}</span><button class="tx" data-replay="${i}"><span class="nm">${esc(p.title)}</span> <span class="play">▶ REVOIR</span>${p.desc?`<p>${esc(p.desc)}</p>`:""}</button></li>`}).join("")+`</ul></div>`;
+  } else if(c.archive){
+    html+=`<div class="card"><h3>Replay</h3><p class="hint">Le serveur n'a pas fourni de programmes passés pour cette chaîne.</p></div>`;
+  }
+  $("gList").innerHTML=html;
+  $("gList").querySelectorAll("[data-replay]").forEach(b=>b.onclick=()=>{
+    const p=past[+b.dataset.replay], mins=Math.max(1,Math.ceil((p.end-p.start)/60000));
+    const u=shiftUrls(c.id,p.startStr||new Date(p.start).toISOString(),mins);
+    if(!u){setStatus("Horaire de replay illisible pour ce programme.",true);return}
+    play("replay",[{...u,title:c.name+" · "+p.title,sub:day(p.start)+" · "+hm(p.start)+" – "+hm(p.end)}],0);
+  });
+}
+
+/* ---------- Événements ---------- */
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button,[data-act]"); if(!t) return;
+  const act=t.dataset.act;
+  if(act==="close"){closeSheet();return}
+  if(act==="account"){openAccount();return}
+  if(act==="demo"){closeSheet();connect({type:"m3u",url:DEMO_URL,label:"iptv-org"});return}
+  if(act==="more"){S.limit+=PAGE;render();return}
+  if(act==="reload"){setStatus("");S.src&&S.src.type==="xtream"?loadXtream(S.tab):S.src&&connect(S.src);return}
+  if(t.dataset.tab){S.tab=t.dataset.tab;S.limit=PAGE;setStatus("");render();window.scrollTo(0,0);return}
+  if(t.dataset.fmt){S.fmt=t.dataset.fmt;store.set("fmt",S.fmt);document.querySelectorAll("[data-fmt]").forEach(b=>b.setAttribute("aria-pressed",String(b===t)));return}
+  if(t.dataset.play!=null){playLive(VIEW,+t.dataset.play);return}
+  if(t.dataset.guide!=null){openGuide(VIEW[+t.dataset.guide]);return}
+  if(t.dataset.fav!=null){const c=VIEW[+t.dataset.fav];S.favs.has(c.key)?S.favs.delete(c.key):S.favs.add(c.key);store.set("favs",[...S.favs]);
+    t.classList.toggle("fav",S.favs.has(c.key));t.textContent=S.favs.has(c.key)?"★":"☆";return}
+  if(t.dataset.open!=null){const x=VIEW[+t.dataset.open];S.tab==="vod"?openMovie(x):openSeries(x);return}
+});
+$("acctBtn").onclick=openAccount;
+$("favOnly").onclick=()=>{S.filt.live.fav=!S.filt.live.fav;S.limit=PAGE;render()};
+let qT;
+$("q").addEventListener("input",()=>{clearTimeout(qT);qT=setTimeout(()=>{S.filt[S.tab].q=$("q").value;S.limit=PAGE;render()},180)});
+$("cat").addEventListener("change",()=>{S.filt[S.tab].cat=$("cat").value;S.limit=PAGE;render();window.scrollTo(0,0)});
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("sheet").hidden){closeSheet()} });
+
+/* ---------- Démarrage ---------- */
+readProgress();
+render();
+if(S.src) connect(S.src); else openAccount();
 })();
 </script>
 </body>
