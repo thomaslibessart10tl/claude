@@ -1,0 +1,11 @@
+name: Probe versions
+on:
+  push:
+    branches: [probe-versions]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "== media3-exoplayer"; curl -fsSL https://dl.google.com/dl/android/maven2/androidx/media3/group-index.xml | grep -o '<media3-exoplayer versions="[^"]*"' | tr ',' '\n' | tail -12
+          echo "== jellyfin ffmpeg"; curl -fsSL https://repo1.maven.org/maven2/org/jellyfin/media3/media3-ffmpeg-decoder/maven-metadata.xml | grep -o '<version>[^<]*' | tail -15
