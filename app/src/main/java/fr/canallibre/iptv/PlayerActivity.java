@@ -56,7 +56,8 @@ public class PlayerActivity extends Activity {
     private ExoPlayer player;
     private PlayerView view;
     private LinearLayout topBar;
-    private TextView titleView, subView, formatBtn, toastView;
+    private TextView titleView, subView, formatBtn, toastView, channelView;
+    private boolean toastSticky = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences progress;
 
@@ -81,6 +82,7 @@ public class PlayerActivity extends Activity {
     private GestureDetector gestures;
 
     private final Runnable hideToast = () -> toastView.setVisibility(View.GONE);
+    private final Runnable hideChannel = () -> channelView.setVisibility(View.GONE);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -216,6 +218,22 @@ public class PlayerActivity extends Activity {
         tlp.rightMargin = dp(24);
         root.addView(toastView, tlp);
 
+        // Nom de la chaîne au zapping : petit bandeau en haut à gauche, qui s'efface seul
+        channelView = new TextView(this);
+        channelView.setTextColor(Color.WHITE);
+        channelView.setTextSize(15);
+        channelView.setTypeface(Typeface.DEFAULT_BOLD);
+        channelView.setPadding(dp(14), dp(8), dp(14), dp(8));
+        GradientDrawable cb = new GradientDrawable();
+        cb.setColor(0xB3000000);
+        cb.setCornerRadius(dp(10));
+        channelView.setBackground(cb);
+        channelView.setVisibility(View.GONE);
+        FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
+        clp.leftMargin = dp(24);
+        clp.topMargin = dp(20);
+        root.addView(channelView, clp);
+
         view.setControllerVisibilityListener((PlayerView.ControllerVisibilityListener) visibility -> topBar.setVisibility(visibility));
 
         setContentView(root);
@@ -299,8 +317,11 @@ public class PlayerActivity extends Activity {
             @Override
             public void onPlaybackStateChanged(int state) {
                 if (state == Player.STATE_READY) {
-                    handler.removeCallbacks(hideToast);
-                    if (toastView.getText().toString().startsWith("Nouvel essai")) toastView.setVisibility(View.GONE);
+                    // La lecture a repris : les messages temporaires s'effacent vite, jamais les erreurs
+                    if (toastView.getVisibility() == View.VISIBLE && !toastSticky) {
+                        handler.removeCallbacks(hideToast);
+                        handler.postDelayed(hideToast, 600);
+                    }
                 } else if (state == Player.STATE_ENDED) {
                     if ("series".equals(kind) && index < items.length() - 1) {
                         saveProgress();
@@ -324,7 +345,12 @@ public class PlayerActivity extends Activity {
         if (it == null) return;
         titleView.setText(it.optString("title", ""));
         subView.setText(it.optString("sub", ""));
-        if (announce) showToast(it.optString("title", ""), 1800);
+        if (announce) {
+            channelView.setText(it.optString("title", ""));
+            channelView.setVisibility(View.VISIBLE);
+            handler.removeCallbacks(hideChannel);
+            handler.postDelayed(hideChannel, 2500);
+        }
 
         recoveries = 0;
         candidates.clear();
@@ -452,6 +478,7 @@ public class PlayerActivity extends Activity {
 
     private void showToast(String text, long durationMs) {
         handler.removeCallbacks(hideToast);
+        toastSticky = durationMs <= 0;
         toastView.setText(text);
         toastView.setVisibility(View.VISIBLE);
         if (durationMs > 0) handler.postDelayed(hideToast, durationMs);
