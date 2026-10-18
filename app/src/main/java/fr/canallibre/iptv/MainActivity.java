@@ -288,7 +288,16 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void play(String json) {
             runOnUiThread(() -> {
-                Intent i = new Intent(MainActivity.this, PlayerActivity.class);
+                // Direct et replay : moteur VLC (par défaut) ; films et séries : ExoPlayer
+                Class<?> target = PlayerActivity.class;
+                try {
+                    JSONObject o = new JSONObject(json);
+                    String kind = o.optString("kind", "live");
+                    boolean liveLike = "live".equals(kind) || "replay".equals(kind);
+                    if (liveLike && !"exo".equals(o.optString("engine", "vlc"))) target = VlcPlayerActivity.class;
+                } catch (Exception ignored) {
+                }
+                Intent i = new Intent(MainActivity.this, target);
                 i.putExtra(PlayerActivity.EXTRA_JSON, json);
                 startActivity(i);
             });

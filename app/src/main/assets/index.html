@@ -186,6 +186,7 @@ const PAGE=120;
 const S={
   src: store.get("source",null),
   fmt: store.get("fmt","ts"),
+  engine: store.get("engine","vlc"),
   tab: "live",
   favs: new Set(store.get("favs",[])),
   progress: {},
@@ -241,7 +242,7 @@ function shiftUrls(id,startStr,mins){
 /* ---------- Lecture ---------- */
 function play(kind,items,index){
   if(!items.length) return;
-  if(APP){ Android.play(JSON.stringify({kind,index,items})); return }
+  if(APP){ Android.play(JSON.stringify({kind,index,items,engine:S.engine})); return }
   setStatus("La lecture se fait dans l'application Android Canal Libre.",true);
 }
 function playLive(view,pos){
@@ -482,6 +483,10 @@ function openAccount(){
     <p class="hint">MPEG-TS convient à la plupart des serveurs. Si une chaîne ne démarre pas, l'application essaie l'autre format toute seule.</p>
     <div class="actions"><button class="pill" data-fmt="ts" aria-pressed="${S.fmt==="ts"}">MPEG-TS</button><button class="pill" data-fmt="m3u8" aria-pressed="${S.fmt==="m3u8"}">HLS (m3u8)</button></div>
   </div>
+  <div class="card"><h3>Lecteur des chaînes en direct</h3>
+    <p class="hint">VLC encaisse mieux les coupures et les sauts des flux IPTV. Le lecteur Android démarre un peu plus vite, mais l'image peut se figer sur certains serveurs. Les films et séries utilisent toujours le lecteur Android.</p>
+    <div class="actions"><button class="pill" data-engine="vlc" aria-pressed="${S.engine==="vlc"}">VLC (recommandé)</button><button class="pill" data-engine="exo" aria-pressed="${S.engine==="exo"}">Lecteur Android</button></div>
+  </div>
   <div class="card"><h3>Démonstration</h3><p class="hint">Chaînes françaises gratuites et légales, recensées par le projet iptv-org.</p><div><button class="btn" data-act="demo">Charger les chaînes gratuites</button></div></div>`);
   $("xtForm").addEventListener("submit",async e=>{
     e.preventDefault();
@@ -625,6 +630,7 @@ document.addEventListener("click",e=>{
   if(act==="more"){S.limit+=PAGE;render();return}
   if(act==="reload"){setStatus("");S.src&&S.src.type==="xtream"?loadXtream(S.tab):S.src&&connect(S.src);return}
   if(t.dataset.tab){S.tab=t.dataset.tab;S.limit=PAGE;setStatus("");render();window.scrollTo(0,0);return}
+  if(t.dataset.engine){S.engine=t.dataset.engine;store.set("engine",S.engine);document.querySelectorAll("[data-engine]").forEach(b=>b.setAttribute("aria-pressed",String(b===t)));return}
   if(t.dataset.fmt){S.fmt=t.dataset.fmt;store.set("fmt",S.fmt);document.querySelectorAll("[data-fmt]").forEach(b=>b.setAttribute("aria-pressed",String(b===t)));return}
   if(t.dataset.play!=null){playLive(VIEW,+t.dataset.play);return}
   if(t.dataset.guide!=null){openGuide(VIEW[+t.dataset.guide]);return}

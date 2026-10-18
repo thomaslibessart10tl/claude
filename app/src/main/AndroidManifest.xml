@@ -29,6 +29,12 @@
         </activity>
 
         <activity
+            android:name=".VlcPlayerActivity"
+            android:exported="false"
+            android:theme="@style/PlayerTheme"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode" />
+
+        <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:theme="@style/PlayerTheme"
