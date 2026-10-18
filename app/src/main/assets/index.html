@@ -164,7 +164,9 @@ li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overfl
       if(!l) continue;
       if(l.startsWith("#EXTINF")){
         const attr=k=>{const m=l.match(new RegExp(k+'="([^"]*)"','i'));return m?m[1]:""};
-        const comma=l.lastIndexOf(",");
+        // Le nom commence après la première virgule hors guillemets (il peut lui-même contenir des virgules)
+        let comma=-1,q=false;
+        for(let k=0;k<l.length;k++){const ch=l[k];if(ch==='"')q=!q;else if(ch===","&&!q){comma=k;break}}
         meta={name:(comma>-1?l.slice(comma+1):"").trim()||attr("tvg-name"),
               logo:attr("tvg-logo"),group:attr("group-title")||"Sans catégorie",id:attr("tvg-id")};
       } else if(l.startsWith("#")){ continue; }
