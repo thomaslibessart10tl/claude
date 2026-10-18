@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -31,6 +32,8 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+
+import org.json.JSONObject;
 
 import javax.net.ssl.SSLException;
 
@@ -147,6 +150,8 @@ public class MainActivity extends Activity {
             }
         });
 
+        web.addJavascriptInterface(new Bridge(), "Android");
+
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState);
         } else {
@@ -154,7 +159,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private static final String USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20";
+    static final String USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20";
 
     static WebResourceResponse nativeFetch(String url, Map<String, String> reqHeaders) {
         try {
@@ -278,6 +283,40 @@ public class MainActivity extends Activity {
                 new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
     }
 
+    /** Passerelle appelée par l'interface (JavaScript) */
+    class Bridge {
+        @JavascriptInterface
+        public void play(String json) {
+            runOnUiThread(() -> {
+                Intent i = new Intent(MainActivity.this, PlayerActivity.class);
+                i.putExtra(PlayerActivity.EXTRA_JSON, json);
+                startActivity(i);
+            });
+        }
+
+        @JavascriptInterface
+        public String progress() {
+            JSONObject out = new JSONObject();
+            try {
+                for (Map.Entry<String, ?> e : getSharedPreferences("progress", MODE_PRIVATE).getAll().entrySet()) {
+                    out.put(e.getKey(), new JSONObject(String.valueOf(e.getValue())));
+                }
+            } catch (Exception ignored) {
+            }
+            return out.toString();
+        }
+
+        @JavascriptInterface
+        public void clearProgress(String key) {
+            getSharedPreferences("progress", MODE_PRIVATE).edit().remove(key).apply();
+        }
+
+        @JavascriptInterface
+        public String version() {
+            return "2.0";
+        }
+    }
+
     private boolean openExternally(Uri uri) {
         if ("file".equals(uri.getScheme())) return false;
         try {
@@ -335,10 +374,11 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
         if (customView != null) {
             exitFullscreen();
-        } else if (web.canGoBack()) {
-            web.goBack();
         } else {
-            super.onBackPressed();
+            // L'interface ferme d'abord ses panneaux ouverts ; sinon on quitte
+            web.evaluateJavascript("(window.onBack&&window.onBack())?'1':'0'", v -> {
+                if (!"\"1\"".equals(v)) finish();
+            });
         }
     }
 
@@ -352,6 +392,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         web.onResume();
+        web.evaluateJavascript("window.onAppResume&&window.onAppResume()", null);
     }
 
     @Override

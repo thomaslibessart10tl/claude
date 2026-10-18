@@ -2,7 +2,7 @@ name: Build APK Canal Libre
 
 on:
   push:
-    branches: [canal-libre-android]
+    branches: [canal-libre-android, dev-2]
   workflow_dispatch:
 
 permissions:
@@ -23,11 +23,13 @@ jobs:
         with:
           gradle-version: '8.14.3'
 
-      - name: Embarquer hls.js dans l'application
-        run: curl -fsSL https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js -o app/src/main/assets/hls.min.js
-
       - name: Compiler l'APK signé
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleRelease --no-daemon 2>&1 | tee build.log || {
+            grep -E "error:|e: |What went wrong|Could not|> |FAILURE|Caused by" build.log | grep -v "^> Task" | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
 
       - name: Renommer l'APK
         run: cp app/build/outputs/apk/release/app-release.apk CanalLibre.apk
@@ -38,10 +40,11 @@ jobs:
           path: CanalLibre.apk
 
       - name: Publier une release téléchargeable
+        if: github.ref == 'refs/heads/canal-libre-android'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: canal-libre-v1.1.1-build${{ github.run_number }}
-          name: Canal Libre 1.1.1 (build ${{ github.run_number }})
+          tag_name: canal-libre-v2.0-build${{ github.run_number }}
+          name: Canal Libre 2.0 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           body: "APK Android du lecteur IPTV Canal Libre. Téléchargez CanalLibre.apk ci-dessous et installez-le sur votre téléphone ou box Android."
           files: CanalLibre.apk
