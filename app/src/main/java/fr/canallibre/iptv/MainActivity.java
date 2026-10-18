@@ -13,10 +13,26 @@ import android.view.WindowManager;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.ConnectException;
+import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+import javax.net.ssl.SSLException;
 
 public class MainActivity extends Activity {
 
@@ -63,6 +79,16 @@ public class MainActivity extends Activity {
         s.setLoadWithOverviewMode(true);
 
         web.setWebViewClient(new WebViewClient() {
+            // Toutes les requêtes HTTP(S) passent par le réseau natif d'Android :
+            // pas de blocage CORS, redirections suivies, identité de lecteur IPTV.
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                String scheme = request.getUrl().getScheme();
+                if (!"http".equals(scheme) && !"https".equals(scheme)) return null;
+                if (!"GET".equalsIgnoreCase(request.getMethod())) return null;
+                return nativeFetch(request.getUrl().toString(), request.getRequestHeaders());
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return openExternally(request.getUrl());
@@ -126,6 +152,130 @@ public class MainActivity extends Activity {
         } else {
             web.loadUrl(START_URL);
         }
+    }
+
+    private static final String USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20";
+
+    static WebResourceResponse nativeFetch(String url, Map<String, String> reqHeaders) {
+        try {
+            return doFetch(url, reqHeaders);
+        } catch (IOException e) {
+            // Beaucoup de serveurs IPTV ne parlent que HTTP : on retente sans le "s"
+            if (url.startsWith("https://")) {
+                try {
+                    return doFetch("http://" + url.substring(8), reqHeaders);
+                } catch (IOException ignored) {
+                }
+            }
+            return textResponse(599, describe(e));
+        }
+    }
+
+    private static WebResourceResponse doFetch(String url, Map<String, String> reqHeaders) throws IOException {
+        String current = url;
+        for (int hop = 0; hop < 8; hop++) {
+            HttpURLConnection c = (HttpURLConnection) new URL(current).openConnection();
+            c.setInstanceFollowRedirects(false);
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(30000);
+            c.setRequestProperty("User-Agent", USER_AGENT);
+            c.setRequestProperty("Accept", "*/*");
+            if (reqHeaders != null) {
+                for (Map.Entry<String, String> h : reqHeaders.entrySet()) {
+                    if ("Range".equalsIgnoreCase(h.getKey())) c.setRequestProperty("Range", h.getValue());
+                }
+            }
+            int code = c.getResponseCode();
+            if (code >= 300 && code < 400 && code != 304) {
+                String loc = c.getHeaderField("Location");
+                c.disconnect();
+                if (loc == null) throw new IOException("Redirection sans destination");
+                current = new URL(new URL(current), loc).toString();
+                continue;
+            }
+
+            String type = c.getContentType();
+            String mime = "application/octet-stream";
+            String charset = null;
+            if (type != null) {
+                String[] parts = type.split(";");
+                mime = parts[0].trim();
+                for (String part : parts) {
+                    String t = part.trim();
+                    if (t.toLowerCase().startsWith("charset=")) charset = t.substring(8).replace("\"", "");
+                }
+            }
+            InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+            if (in == null) in = new ByteArrayInputStream(new byte[0]);
+
+            // Playlist HLS reçue après redirection : on rend ses liens absolus,
+            // sinon les segments seraient cherchés sur le serveur d'origine.
+            boolean redirected = !current.equals(url);
+            boolean looksHls = mime.toLowerCase().contains("mpegurl") || current.toLowerCase().contains(".m3u8");
+            if (redirected && looksHls && code < 400) {
+                String body = new String(readAll(in), StandardCharsets.UTF_8);
+                if (body.contains("#EXT-X-")) body = absolutize(body, current);
+                in = new ByteArrayInputStream(body.getBytes(StandardCharsets.UTF_8));
+                charset = "utf-8";
+            }
+
+            Map<String, String> headers = new HashMap<>();
+            headers.put("Access-Control-Allow-Origin", "*");
+            headers.put("Cache-Control", "no-cache");
+            String reason = c.getResponseMessage();
+            if (reason == null || reason.isEmpty()) reason = code < 400 ? "OK" : "Error";
+            return new WebResourceResponse(mime, charset, code, reason, headers, in);
+        }
+        throw new IOException("Trop de redirections");
+    }
+
+    private static String absolutize(String playlist, String base) throws IOException {
+        URL b = new URL(base);
+        StringBuilder out = new StringBuilder();
+        for (String line : playlist.split("\\r?\\n")) {
+            String t = line.trim();
+            if (!t.isEmpty() && !t.startsWith("#")) {
+                out.append(new URL(b, t).toString());
+            } else if (t.startsWith("#") && t.contains("URI=\"")) {
+                int i = t.indexOf("URI=\"") + 5;
+                int j = t.indexOf('"', i);
+                if (j > i) {
+                    out.append(t, 0, i).append(new URL(b, t.substring(i, j)).toString()).append(t.substring(j));
+                } else out.append(t);
+            } else {
+                out.append(line);
+            }
+            out.append('\n');
+        }
+        return out.toString();
+    }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] buf = new byte[16384];
+        int n;
+        while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+        in.close();
+        return bos.toByteArray();
+    }
+
+    private static String describe(IOException e) {
+        if (e instanceof UnknownHostException)
+            return "Serveur introuvable : vérifiez l'adresse (et votre connexion Internet).";
+        if (e instanceof SocketTimeoutException)
+            return "Le serveur ne répond pas : vérifiez l'adresse et le port, ou réessayez plus tard.";
+        if (e instanceof ConnectException)
+            return "Connexion refusée : le port est sans doute incorrect, ou le serveur est arrêté.";
+        if (e instanceof SSLException)
+            return "Connexion sécurisée impossible : utilisez http:// au lieu de https://.";
+        return "Connexion impossible (" + e.getClass().getSimpleName() + (e.getMessage() != null ? " : " + e.getMessage() : "") + ").";
+    }
+
+    private static WebResourceResponse textResponse(int code, String text) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Access-Control-Allow-Origin", "*");
+        return new WebResourceResponse("text/plain", "utf-8", code, "Network Error", headers,
+                new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
     }
 
     private boolean openExternally(Uri uri) {

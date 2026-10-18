@@ -40,8 +40,8 @@ jobs:
       - name: Publier une release téléchargeable
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: canal-libre-v1.0.${{ github.run_number }}
-          name: Canal Libre 1.0 (build ${{ github.run_number }})
+          tag_name: canal-libre-v1.1-build${{ github.run_number }}
+          name: Canal Libre 1.1 (build ${{ github.run_number }})
           target_commitish: ${{ github.sha }}
           body: "APK Android du lecteur IPTV Canal Libre. Téléchargez CanalLibre.apk ci-dessous et installez-le sur votre téléphone ou box Android."
           files: CanalLibre.apk

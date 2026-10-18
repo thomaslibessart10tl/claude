@@ -80,6 +80,10 @@ li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overfl
 .empty{padding:28px 16px;text-align:center;color:var(--muted)}
 .hint{font-size:12px;color:var(--muted)}
 @media (pointer:coarse){.hint{display:none}}
+[hidden]{display:none!important}
+#xtBtn{margin-left:auto}
+.xtream{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;padding-bottom:14px}
+.xtream input{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
 .hint code{font-family:var(--mono);color:var(--fg)}
 @media (prefers-reduced-motion:no-preference){.brand i{animation:pulse 2s infinite}@keyframes pulse{50%{opacity:.35}}}
 </style>
@@ -87,13 +91,20 @@ li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overfl
 <body>
 <header>
   <div class="brand"><i aria-hidden="true"></i>Canal Libre</div>
-  <form class="loader" id="urlForm">
-    <input id="urlInput" type="url" placeholder="URL d'une playlist .m3u / .m3u8 ou d'un flux" aria-label="URL de playlist ou de flux">
+  <button class="btn" id="xtBtn" type="button" aria-expanded="false">Identifiants</button>
+  <form class="loader" id="urlForm" novalidate>
+    <input id="urlInput" type="text" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="URL d'une playlist .m3u / .m3u8 ou d'un flux" aria-label="URL de playlist ou de flux">
     <button class="btn primary" type="submit">Charger</button>
     <label class="btn" for="fileInput">Fichier…</label>
     <input id="fileInput" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/vnd.apple.mpegurl" hidden>
   </form>
 </header>
+<form class="xtream" id="xtForm" novalidate hidden>
+  <input id="xtServer" type="text" inputmode="url" placeholder="Serveur (ex. http://monserveur.tv:8080)" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Serveur">
+  <input id="xtUser" type="text" placeholder="Identifiant" autocomplete="username" autocapitalize="off" spellcheck="false" aria-label="Identifiant">
+  <input id="xtPass" type="password" placeholder="Mot de passe" autocomplete="current-password" aria-label="Mot de passe">
+  <button class="btn primary" type="submit">Se connecter</button>
+</form>
 
 <main>
   <section class="stage">
@@ -185,8 +196,9 @@ li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overfl
     setStatus("Chargement…");
     // Un lien direct vers un flux (.m3u8 HLS, .mp4, .ts) : on le joue directement
     try{
+      if(!/^[a-z]+:\/\//i.test(url)) url="http://"+url;
       const r=await fetch(url);
-      if(!r.ok) throw new Error("HTTP "+r.status);
+      if(!r.ok) throw new Error(httpMsg(r.status, r.status===599?await r.text():""));
       const text=await r.text();
       if(/#EXT-X-(TARGETDURATION|STREAM-INF|MEDIA-SEQUENCE)/.test(text) && !/#EXTINF:-?1/.test(text.split("\n").slice(0,5).join("\n")) && !/tvg-|group-title/.test(text)){
         channels=[{name:"Flux direct",logo:"",group:"Flux",url,n:1}];render();select(0,true);setStatus("");return;
@@ -197,7 +209,7 @@ li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overfl
       // Probablement bloqué par CORS : on tente la lecture directe
       if(/\.(m3u8|mp4|ts)(\?|$)/i.test(url)){
         channels=[{name:"Flux direct",logo:"",group:"Flux",url,n:1}];render();select(0,true);setStatus("");
-      } else setStatus("Impossible de lire cette playlist ("+e.message+"). Le serveur bloque peut-être l'accès depuis un navigateur : téléchargez le fichier .m3u et ouvrez-le avec « Fichier… ».",true);
+      } else setStatus("Impossible de lire cette playlist. "+(e instanceof TypeError?"Connexion au serveur impossible : vérifiez l'adresse et le port, et essayez http:// au lieu de https://.":e.message),true);
     }
   }
 
@@ -211,14 +223,14 @@ li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overfl
       list.innerHTML=`<li class="empty" style="cursor:default">${channels.length?(onlyFav?"Aucun favori. Touchez ☆ à côté d'une chaîne pour l'ajouter.":"Aucune chaîne ne correspond."):"Chargez une playlist M3U pour commencer."}</li>`;
       return;
     }
-    list.innerHTML=view.map(c=>{
+    list.innerHTML=view.slice(0,400).map(c=>{
       const i=channels.indexOf(c);
       return `<li data-i="${i}" class="${i===current?"on":""}">
         <span class="num">${c.n}</span>
         ${c.logo?`<img class="logo" loading="lazy" src="${esc(c.logo)}" alt="" onerror="this.style.visibility='hidden'">`:`<span class="logo"></span>`}
         <span class="txt"><span class="nm">${esc(c.name)}</span><span class="gr">${esc(c.group)}</span></span>
         <button class="star ${favs.has(c.url)?"fav":""}" data-fav="${i}" aria-label="Favori">${favs.has(c.url)?"★":"☆"}</button>
-      </li>`}).join("");
+      </li>`}).join("")+(view.length>400?`<li class="empty" style="cursor:default">${view.length-400} autres chaînes : utilisez la recherche ou les catégories.</li>`:"");
   }
 
   function select(i,play=true){
@@ -236,7 +248,20 @@ li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overfl
   function badge(txt,cls){const b=$("nowBadge");b.textContent=txt;b.className="badge"+(cls?" "+cls:"")}
   function overlay(title,sub){const o=$("overlay");if(!title){o.hidden=true;return}o.hidden=false;o.innerHTML=`<strong>${esc(title)}</strong><span>${esc(sub||"")}</span>`}
 
+  // Xtream : un flux .ts ou sans extension est demandé en HLS (.m3u8), lisible par le lecteur
+  function xtreamHls(u){
+    const m=u.match(/^(https?:\/\/[^\/]+)\/(?:live\/)?([^\/]+)\/([^\/]+)\/(\d+)(?:\.ts)?$/i);
+    return m?`${m[1]}/live/${m[2]}/${m[3]}/${m[4]}.m3u8`:u;
+  }
+  function httpMsg(s,body){
+    if(s===599) return body||"Serveur injoignable.";
+    if(s===401||s===403) return "Le serveur refuse l'accès (erreur "+s+") : identifiant ou mot de passe incorrect, abonnement expiré, ou trop d'appareils connectés.";
+    if(s===404) return "Adresse introuvable sur le serveur (erreur 404). Vérifiez l'adresse et le port.";
+    return "Le serveur a répondu avec l'erreur "+s+".";
+  }
+
   function playUrl(url){
+    url=xtreamHls(url);
     if(hls){hls.destroy();hls=null}
     video.removeAttribute("src"); video.load();
     overlay("Connexion…","");badge("CONNEXION");setStatus("");
@@ -295,6 +320,21 @@ li .gr{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overfl
     else if(e.key==="/"){e.preventDefault();$("search").focus()}
     else if(e.key.toLowerCase()==="m"){video.muted=!video.muted}
     else if(e.key.toLowerCase()==="f"){toggleFs()}
+  });
+
+  const xt=store.get("xtream",null);
+  if(xt){$("xtServer").value=xt.server||"";$("xtUser").value=xt.user||"";$("xtPass").value=xt.pass||""}
+  $("xtBtn").onclick=()=>{const f=$("xtForm");f.hidden=!f.hidden;$("xtBtn").setAttribute("aria-expanded",String(!f.hidden));if(!f.hidden)$("xtServer").focus()};
+  $("xtForm").addEventListener("submit",e=>{
+    e.preventDefault();
+    let server=$("xtServer").value.trim().replace(/\/+$/,"");
+    const user=$("xtUser").value.trim(), pass=$("xtPass").value.trim();
+    if(!server||!user||!pass){setStatus("Renseignez le serveur, l'identifiant et le mot de passe.",true);return}
+    if(!/^https?:\/\//i.test(server)) server="http://"+server;
+    store.set("xtream",{server,user,pass});
+    const url=server+"/get.php?username="+encodeURIComponent(user)+"&password="+encodeURIComponent(pass)+"&type=m3u_plus&output=m3u8";
+    $("urlInput").value=url; $("xtForm").hidden=true; $("xtBtn").setAttribute("aria-expanded","false");
+    loadUrl(url);
   });
 
   const saved=store.get("playlist",null)||SAMPLE_URL;
