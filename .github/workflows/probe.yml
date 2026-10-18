@@ -9,5 +9,7 @@ jobs:
       - run: |
           m=$(curl -fsSL https://dl.google.com/dl/android/maven2/androidx/media3/group-index.xml | grep -o '<media3-exoplayer versions="[^"]*"' | tr ',' ' ' | awk '{for(i=NF-10;i<=NF;i++) printf $i" "}')
           j=$(curl -fsSL https://repo1.maven.org/maven2/org/jellyfin/media3/media3-ffmpeg-decoder/maven-metadata.xml | grep -o '<version>[^<]*' | sed 's/<version>//' | tail -12 | tr '\n' ' ')
+          a=$(curl -fsSL https://dl.google.com/dl/android/maven2/com/android/tools/build/group-index.xml | grep -o "<gradle versions=\"[^\"]*\"" | tr "," " " | awk "{for(i=NF-14;i<=NF;i++) printf \$i\" \"}")
+          echo "::notice title=agp::$a"
           echo "::notice title=media3::$m"
           echo "::notice title=jellyfin::$j"
