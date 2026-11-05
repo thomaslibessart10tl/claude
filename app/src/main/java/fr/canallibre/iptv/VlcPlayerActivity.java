@@ -96,7 +96,7 @@ public class VlcPlayerActivity extends Activity {
         opts.add("--network-caching=2000");
         opts.add("--live-caching=2000");
         opts.add("--http-reconnect");
-        opts.add("--http-user-agent=" + MainActivity.USER_AGENT);
+        opts.add("--http-user-agent=" + MainActivity.userAgent);
         opts.add("--clock-jitter=0");
         opts.add("--clock-synchro=0");
         opts.add("--audio-time-stretch");
@@ -370,7 +370,7 @@ public class VlcPlayerActivity extends Activity {
         Media m = new Media(libVlc, Uri.parse(url));
         m.setHWDecoderEnabled(true, false);
         m.addOption(":network-caching=2000");
-        m.addOption(":http-user-agent=" + MainActivity.USER_AGENT);
+        m.addOption(":http-user-agent=" + MainActivity.userAgent);
         mp.setMedia(m);
         m.release();
         mp.play();

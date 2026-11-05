@@ -255,7 +255,7 @@ public class PlayerActivity extends Activity {
 
     private void buildPlayer() {
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
-                .setUserAgent(MainActivity.USER_AGENT)
+                .setUserAgent(MainActivity.userAgent)
                 .setAllowCrossProtocolRedirects(true)
                 .setConnectTimeoutMs(15000)
                 .setReadTimeoutMs(30000);

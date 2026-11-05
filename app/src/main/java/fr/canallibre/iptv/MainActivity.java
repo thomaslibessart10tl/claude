@@ -161,29 +161,57 @@ public class MainActivity extends Activity {
 
     static final String USER_AGENT = "VLC/3.0.20 LibVLC/3.0.20";
 
+    /** Identités essayées tour à tour : certains serveurs IPTV coupent la connexion selon l'application. */
+    private static final String[] AGENTS = {
+            USER_AGENT,
+            System.getProperty("http.agent", "Dalvik/2.1.0 (Linux; U; Android)"),
+            "okhttp/4.12.0"
+    };
+    /** Identité acceptée par le serveur, réutilisée ensuite par les lecteurs vidéo. */
+    static volatile String userAgent = USER_AGENT;
+
     static WebResourceResponse nativeFetch(String url, Map<String, String> reqHeaders) {
-        try {
-            return doFetch(url, reqHeaders);
-        } catch (IOException e) {
-            // Beaucoup de serveurs IPTV ne parlent que HTTP : on retente sans le "s"
-            if (url.startsWith("https://")) {
+        IOException last = null;
+        String[] urls = url.startsWith("https://")
+                ? new String[]{url, "http://" + url.substring(8)} // beaucoup de serveurs IPTV ne parlent que HTTP
+                : new String[]{url};
+        for (String u : urls) {
+            // On commence par l'identité qui a déjà marché, puis les autres
+            java.util.List<String> order = new java.util.ArrayList<>();
+            order.add(userAgent);
+            for (String a : AGENTS) if (!order.contains(a)) order.add(a);
+            for (String ua : order) {
                 try {
-                    return doFetch("http://" + url.substring(8), reqHeaders);
-                } catch (IOException ignored) {
+                    WebResourceResponse r = doFetch(u, reqHeaders, ua);
+                    userAgent = ua;
+                    return r;
+                } catch (IOException e) {
+                    last = e;
+                    // Serveur muet ou introuvable : inutile de changer d'identité
+                    if (!closedByServer(e)) break;
                 }
             }
-            return textResponse(599, describe(e));
         }
+        return textResponse(599, describe(last));
     }
 
-    private static WebResourceResponse doFetch(String url, Map<String, String> reqHeaders) throws IOException {
+    private static boolean closedByServer(IOException e) {
+        String m = String.valueOf(e.getMessage()).toLowerCase(java.util.Locale.ROOT);
+        return e instanceof java.io.EOFException || e instanceof java.net.SocketException
+                || m.contains("unexpected end of stream") || m.contains("connection reset")
+                || m.contains("broken pipe") || m.contains("closed");
+    }
+
+    private static WebResourceResponse doFetch(String url, Map<String, String> reqHeaders, String agent) throws IOException {
         String current = url;
         for (int hop = 0; hop < 8; hop++) {
             HttpURLConnection c = (HttpURLConnection) new URL(current).openConnection();
             c.setInstanceFollowRedirects(false);
             c.setConnectTimeout(15000);
             c.setReadTimeout(30000);
-            c.setRequestProperty("User-Agent", USER_AGENT);
+            c.setRequestProperty("User-Agent", agent);
+            // Pas de réutilisation de connexion : évite les connexions mortes gardées en réserve
+            c.setRequestProperty("Connection", "close");
             c.setRequestProperty("Accept", "*/*");
             if (reqHeaders != null) {
                 for (Map.Entry<String, String> h : reqHeaders.entrySet()) {
@@ -271,8 +299,12 @@ public class MainActivity extends Activity {
             return "Le serveur ne répond pas : vérifiez l'adresse et le port, ou réessayez plus tard.";
         if (e instanceof ConnectException)
             return "Connexion refusée : le port est sans doute incorrect, ou le serveur est arrêté.";
+        if (e != null && closedByServer(e))
+            return "Le serveur a coupé la connexion sans répondre. Il est peut-être en panne, ou il a changé d'adresse : "
+                    + "vérifiez auprès de votre fournisseur que l'adresse et le port du serveur sont toujours les mêmes.";
         if (e instanceof SSLException)
             return "Connexion sécurisée impossible : utilisez http:// au lieu de https://.";
+        if (e == null) return "Connexion impossible.";
         return "Connexion impossible (" + e.getClass().getSimpleName() + (e.getMessage() != null ? " : " + e.getMessage() : "") + ").";
     }
 

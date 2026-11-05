@@ -10,8 +10,8 @@ android {
         applicationId 'fr.canallibre.iptv'
         minSdk 23
         targetSdk 35
-        versionCode 7
-        versionName '2.1'
+        versionCode 8
+        versionName '2.1.1'
         // Téléphones, tablettes, box Android TV et Fire TV (processeurs ARM)
         ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
     }
